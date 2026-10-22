@@ -90,7 +90,7 @@ def prompts_doc() -> str:
     for name, module in REGISTRY.items():
         tier = STEP_TIERS.get(name, "main")
         tier_text = "by plan complexity (fast ≤ 1, else main)" if tier == "auto" else tier
-        out.append(f"| [`{name}`](#{name.replace('_', '-')}) | {module.VERSION} | {tier_text} | "
+        out.append(f"| [`{name}`](#{name}) | {module.VERSION} | {tier_text} | "
                    f"{OUTPUT_CONTRACT.get(name, '')} | {PURPOSE.get(name, '')} |")
     for name, module in REGISTRY.items():
         out += ["", f"## {name}", "",

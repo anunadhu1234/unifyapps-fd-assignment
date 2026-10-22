@@ -27,7 +27,8 @@ def query_planner(state: AgentState, deps: AgentDeps, config: RunnableConfig) ->
         schema_context=_with_join_notes(retrieval),
         as_of=deps.kb.meta["as_of_date"],
         previous_plan=previous_plan,
-        examples=retrieval.get("examples"),
+        # A follow-up edits the previous plan; worked examples would pull it towards their own column choices.
+        examples=None if follow_up else retrieval.get("examples"),
     )
     plan, call = deps.llm.structured("query_planner", messages, QueryPlan, config=config)
     return {

@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from prompt_library._shared import SECURITY_RULES, as_json, user_block
 
 NAME = "query_planner"
-VERSION = "1.0"
+VERSION = "1.1"
 
 SYSTEM = """\
 You are a senior analytics engineer. You plan SQL queries over the database described below. You do NOT write SQL: \
@@ -36,10 +36,14 @@ state it in assumptions — business users prefer an answer with a stated assump
 8. When two tables can be linked in more than one way (e.g. a customer's account manager vs. the sales rep on an \
 order), choose the link the request means and state it in relationship_notes as "Table.Column".
 9. Select explicit, useful columns (for people: ID, name and the fields asked about). Use kind = "all_columns" only \
-when the user asks for "all" rows of a single table without naming fields.
+when the user asks for "all" rows of a single table without naming fields. (For follow-ups, rule 11 wins: keep the \
+previous select list as it is.)
 10. Add order_by / limit only when the request implies them ("top 5", "latest", "most"). Rankings need order_by.
-11. FOLLOW-UPS: when a PREVIOUS PLAN is given and the request changes it, return the COMPLETE updated plan — keep \
-everything the user did not change, and apply only the change.
+11. FOLLOW-UPS: when a PREVIOUS PLAN is given and the request changes it, return the COMPLETE updated plan as a \
+minimal edit of it. Copy every part the request does not mention — tables, select items (including kind = \
+"all_columns"), filters, group_by, having, order_by, limit — exactly as it is, and apply only the change. \
+"Only those from California" adds one filter; "sort by signup date" replaces order_by; "just the count" replaces \
+the select list. Do not re-pick or tidy up columns the user did not ask to change.
 
 {security}
 """

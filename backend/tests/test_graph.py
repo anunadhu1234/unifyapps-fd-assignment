@@ -85,12 +85,14 @@ def test_follow_up_modifies_previous_query():
     def planner_turn2(messages):
         text = "\n".join(m.content for m in messages)
         assert "PREVIOUS PLAN" in text  # the planner edits the previous plan
+        assert "SIMILAR SOLVED REQUESTS" not in text  # ...and is not pulled towards an example's columns
         return plan(["Customers"], [ALL_CUSTOMERS],
                     [{"table": "Customers", "column": "State", "operator": "=", "values": ["California"]}])
 
     def generator_turn2(messages):
         text = "\n".join(m.content for m in messages)
         assert "PREVIOUS SQL" in text and '"CA"' in text  # previous SQL + grounded stored value
+        assert "SIMILAR SOLVED REQUESTS" not in text
         return {"sql": "SELECT * FROM Customers WHERE State = 'CA'"}
 
     agent, llm = agent_with({

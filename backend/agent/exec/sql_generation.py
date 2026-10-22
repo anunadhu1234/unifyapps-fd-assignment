@@ -29,7 +29,8 @@ def sql_generation(state: AgentState, deps: AgentDeps, config: RunnableConfig) -
         plan=plan_for_sql(grounded),
         as_of=deps.kb.meta["as_of_date"],
         previous_sql=state.get("last_sql") if follow_up else None,
-        examples=state["retrieval"].get("examples"),
+        # A follow-up edits the previous SQL; worked examples would pull it towards their own column choices.
+        examples=None if follow_up else state["retrieval"].get("examples"),
     )
     draft, call = deps.llm.structured("sql_generation", messages, SQLDraft,
                                       complexity=grounded["complexity"], config=config)

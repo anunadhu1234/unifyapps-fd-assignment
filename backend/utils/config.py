@@ -82,7 +82,11 @@ class Settings(BaseSettings):
     # Questions per client IP, for every account. Protects the LLM quota on a public link.
     rate_limit_per_minute: int = 6
     rate_limit_per_day: int = 60
+    # Browser origins allowed to call the API when the frontend is hosted separately (e.g. on Vercel).
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Optional regex for origins that change per deploy, e.g. Vercel preview URLs:
+    # ^https://unifyapps-fd-assignment(-[a-z0-9-]+)?\.vercel\.app$
+    cors_origin_regex: str | None = None
     app_db_path: Path = BACKEND_DIR / "data" / "runtime" / "app.db"  # chat list + turn history
     frontend_dist: Path = REPO_DIR / "frontend" / "dist"
 

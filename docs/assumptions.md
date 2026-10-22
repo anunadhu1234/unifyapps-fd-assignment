@@ -79,7 +79,7 @@ decisions with their reasoning.
 | U2 | The developer role sees internals (trace, plan, every LLM call, tokens, cost, run history, prompts, knowledge graph); this is enforced by the API, not just hidden in the UI | Internals can reveal prompts and schema details |
 | U3 | Chats are private to the account **and** browser (`username:client_id`), so several reviewers sharing one test account do not see each other's chats | Shared demo credentials |
 | U4 | Per-IP rate limits (6/min, 60/day) and login throttling protect the public demo and its LLM budget | A public link with shared credentials |
-| U5 | Conversation memory persists across server restarts (SQLite checkpointer) | Follow-ups keep working after a redeploy |
+| U5 | Conversation memory is stored in SQLite (checkpointer). On the free hosting plan the disk is ephemeral, so chats reset when the service restarts | Free hosting was preferred; with a persistent disk or managed database, chats survive restarts unchanged |
 
 ## Engineering decisions
 
@@ -100,4 +100,4 @@ decisions with their reasoning.
 - Connecting to a user-supplied database at runtime (the knowledge base is built per schema).
 - A golden-question accuracy benchmark (deliberately deferred).
 - Horizontal scaling (the rate limiter and stores are single-instance by design).
-- Docker packaging and hosting (next step).
+- Docker packaging (the free hosting runs the app natively; not needed).

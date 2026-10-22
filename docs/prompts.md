@@ -36,15 +36,15 @@ SQLITE RULES:
 
 | Prompt / node | Version | Model tier | Output | Purpose |
 |---|---|---|---|---|
-| [`intent_detection`](#intent-detection) | 1.0 | fast | `IntentResult` (structured output) | Classify the request (generate / follow-up / optimize / debug / explain / schema question / destructive / out of scope) and rewrite follow-ups into a standalone question. |
-| [`query_planner`](#query-planner) | 1.0 | main | `QueryPlan` (structured output) | Turn the request into a structured plan (tables, columns, filters, grouping, ordering) — no SQL yet — so every part can be grounded against the real schema first. |
-| [`sql_generation`](#sql-generation) | 1.0 | by plan complexity (fast ≤ 1, else main) | `SQLDraft` (structured output) | Write one read-only SQLite query that implements the grounded plan exactly. |
-| [`sql_repair`](#sql-repair) | 1.0 | main | `SQLDraft` (structured output) | Fix SQL that failed validation, using the validator's findings and fix hints verbatim. |
-| [`sql_optimization`](#sql-optimization) | 1.0 | main | `OptimizationResult` (structured output) | Rewrite a user's query for readability and speed, and recommend indexes (the rewrite is only accepted if it returns exactly the same rows). |
-| [`sql_debugging`](#sql-debugging) | 1.0 | main | `DebugResult` (structured output) | Identify what is wrong with a user's query, explain why, and return a corrected version. |
-| [`generate_explanation`](#generate-explanation) | 1.1 | fast | Markdown text, streamed token by token | Explain the final SQL in plain English for a business user. |
-| [`suggest_follow_ups`](#suggest-follow-ups) | 1.0 | fast | `FollowUpSuggestions` (structured output) | Propose three grounded 'Dive deeper' follow-ups: a drill-down, a refinement, a related question. |
-| [`schema_answer`](#schema-answer) | 1.0 | fast | Markdown text, streamed token by token | Answer questions about the database (or SQL concepts) from the knowledge-base documentation only. |
+| [`intent_detection`](#intent_detection) | 1.0 | fast | `IntentResult` (structured output) | Classify the request (generate / follow-up / optimize / debug / explain / schema question / destructive / out of scope) and rewrite follow-ups into a standalone question. |
+| [`query_planner`](#query_planner) | 1.1 | main | `QueryPlan` (structured output) | Turn the request into a structured plan (tables, columns, filters, grouping, ordering) — no SQL yet — so every part can be grounded against the real schema first. |
+| [`sql_generation`](#sql_generation) | 1.0 | by plan complexity (fast ≤ 1, else main) | `SQLDraft` (structured output) | Write one read-only SQLite query that implements the grounded plan exactly. |
+| [`sql_repair`](#sql_repair) | 1.0 | main | `SQLDraft` (structured output) | Fix SQL that failed validation, using the validator's findings and fix hints verbatim. |
+| [`sql_optimization`](#sql_optimization) | 1.0 | main | `OptimizationResult` (structured output) | Rewrite a user's query for readability and speed, and recommend indexes (the rewrite is only accepted if it returns exactly the same rows). |
+| [`sql_debugging`](#sql_debugging) | 1.0 | main | `DebugResult` (structured output) | Identify what is wrong with a user's query, explain why, and return a corrected version. |
+| [`generate_explanation`](#generate_explanation) | 1.1 | fast | Markdown text, streamed token by token | Explain the final SQL in plain English for a business user. |
+| [`suggest_follow_ups`](#suggest_follow_ups) | 1.0 | fast | `FollowUpSuggestions` (structured output) | Propose three grounded 'Dive deeper' follow-ups: a drill-down, a refinement, a related question. |
+| [`schema_answer`](#schema_answer) | 1.0 | fast | Markdown text, streamed token by token | Answer questions about the database (or SQL concepts) from the knowledge-base documentation only. |
 
 ## intent_detection
 
@@ -91,7 +91,7 @@ LATEST USER MESSAGE:
 
 ## query_planner
 
-**File:** [`backend/prompt_library/query_planner.py`](../backend/prompt_library/query_planner.py) · **Version:** 1.0 · **Output:** `QueryPlan` (structured output)
+**File:** [`backend/prompt_library/query_planner.py`](../backend/prompt_library/query_planner.py) · **Version:** 1.1 · **Output:** `QueryPlan` (structured output)
 
 Turn the request into a structured plan (tables, columns, filters, grouping, ordering) — no SQL yet — so every part can be grounded against the real schema first.
 
@@ -109,9 +109,9 @@ PLANNING RULES
 6. Business terms: follow BUSINESS TERMS definitions. For a term marked ambiguous, use its default and say so in assumptions.
 7. Ask for clarification ONLY when no sensible default exists. Otherwise choose the most reasonable reading and state it in assumptions — business users prefer an answer with a stated assumption over a question.
 8. When two tables can be linked in more than one way (e.g. a customer's account manager vs. the sales rep on an order), choose the link the request means and state it in relationship_notes as "Table.Column".
-9. Select explicit, useful columns (for people: ID, name and the fields asked about). Use kind = "all_columns" only when the user asks for "all" rows of a single table without naming fields.
+9. Select explicit, useful columns (for people: ID, name and the fields asked about). Use kind = "all_columns" only when the user asks for "all" rows of a single table without naming fields. (For follow-ups, rule 11 wins: keep the previous select list as it is.)
 10. Add order_by / limit only when the request implies them ("top 5", "latest", "most"). Rankings need order_by.
-11. FOLLOW-UPS: when a PREVIOUS PLAN is given and the request changes it, return the COMPLETE updated plan — keep everything the user did not change, and apply only the change.
+11. FOLLOW-UPS: when a PREVIOUS PLAN is given and the request changes it, return the COMPLETE updated plan as a minimal edit of it. Copy every part the request does not mention — tables, select items (including kind = "all_columns"), filters, group_by, having, order_by, limit — exactly as it is, and apply only the change. "Only those from California" adds one filter; "sort by signup date" replaces order_by; "just the count" replaces the select list. Do not re-pick or tidy up columns the user did not ask to change.
 
 {security}
 ```

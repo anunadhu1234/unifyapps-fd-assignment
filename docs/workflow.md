@@ -251,7 +251,12 @@ Optional steps (explanation, suggestions) fail soft with deterministic fallbacks
 - `schema_retrieval` adds the previous plan's tables; `query_planner` receives the **previous plan** and returns it
   with one extra filter `Customers.State = "California"`.
 - `plan_grounding` maps `"California"` → `'CA'` (state names are stored as USPS codes).
-- `sql_generation` receives the **previous SQL** and adds `WHERE c.State = 'CA'` → 343 rows.
+- `sql_generation` receives the **previous SQL** and adds `WHERE c.State = 'CA'` → 343 rows, keeping the same
+  columns and ordering.
+- Worked examples are **not** sent with follow-ups: the previous plan and SQL are the template, and a similar
+  example ("Show all customers from California" with its own column list) would otherwise pull the answer away from
+  what the user already had. Further turns chain the same way: "Sort them by signup date, newest first" replaces
+  only the ordering, and "Now just give me the count" replaces only the select list.
 
 ### 3. Self-correction
 

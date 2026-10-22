@@ -38,7 +38,8 @@ Both logins are defined in `backend/.env` (`AUTH_NORMAL_*`, `AUTH_DEV_*`) and ca
 14. [Project structure](#project-structure)
 15. [Testing and quality](#testing-and-quality)
 16. [Documentation index](#documentation-index)
-17. [Limitations and next steps](#limitations-and-next-steps)
+17. [Deployment](#deployment)
+18. [Limitations and next steps](#limitations-and-next-steps)
 
 ---
 
@@ -90,7 +91,7 @@ grounded **"Dive deeper"** follow-up questions.
 | Prompt injection protection | ✅ | Deterministic input guard **before any LLM call**, plus prompt-level rules and output validation |
 | Dark mode, streaming responses | ✅ | Theme toggle; SSE progress per node + token-streamed explanation |
 | Unit tests | ✅ | 137 tests, no network needed (scripted LLM) |
-| Docker / deployment | ⏳ | Next step |
+| Deployment | ✅ | Backend on Render, frontend on Vercel (free plans), see [Deployment](#deployment) |
 
 ### Deliverables
 
@@ -108,31 +109,124 @@ grounded **"Dive deeper"** follow-up questions.
 
 ## Quick start
 
+Local setup takes about 5 minutes. The sample database and the knowledge base are committed, so nothing has to be
+generated.
+
 ### Prerequisites
 
-- Python **3.11+** (developed on 3.14)
-- Node.js **20+**
-- An **AWS Bedrock API key** (bearer token) with access to Claude Haiku 5.5 in `us-west-2`
+| Tool | Version | Check |
+|---|---|---|
+| Python | 3.11 or newer (developed on 3.14, deployed on 3.12) | `python --version` |
+| Node.js | 20 or newer | `node --version` |
+| Git | any | `git --version` |
+| AWS Bedrock API key | Bearer token with access to Claude Haiku 5.5 in `us-west-2` | Bedrock console → API keys |
 
-### 1. Backend
+### 1. Get the code
+
+```bash
+git clone https://github.com/anunadhu1234/unifyapps-fd-assignment.git
+cd unifyapps-fd-assignment
+```
+
+### 2. Backend
 
 ```bash
 cd backend
 python -m venv .venv
-# Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate
+```
+
+Activate the virtual environment:
+
+| Shell | Command |
+|---|---|
+| macOS / Linux | `source .venv/bin/activate` |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Windows Command Prompt | `.venv\Scripts\activate.bat` |
+| Windows Git Bash | `source .venv/Scripts/activate` |
+
+Install the backend with its test tools, and create the settings file:
+
+```bash
 pip install -e ".[dev]"
+cp .env.example .env          # Windows Command Prompt: copy .env.example .env
+```
 
-cp .env.example .env
-# Fill in AWS_BEARER_TOKEN_BEDROCK, the two test-account passwords and AUTH_SECRET
+Open `backend/.env` and fill in the four required values. Everything else has working defaults.
 
-python scripts/check_llm.py          # confirms Bedrock answers on both model tiers
+| Variable | What to put | How to get it |
+|---|---|---|
+| `AWS_BEARER_TOKEN_BEDROCK` | Your Bedrock API key | AWS console → Amazon Bedrock → API keys (region `us-west-2`) |
+| `AUTH_NORMAL_PASSWORD` | A password for the `demo` account | Choose one |
+| `AUTH_DEV_PASSWORD` | A password for the `developer` account | Choose one |
+| `AUTH_SECRET` | A long random string that signs login tokens | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+
+Check that Bedrock answers, then start the API:
+
+```bash
+python scripts/check_llm.py          # expect: [ok] fast … 'pong'  and  [ok] main … 'pong'
 uvicorn main:app --reload --port 8000
 ```
 
-The sample database (`data/company.db`) and the knowledge base (`knowledge_base/*.json`) are committed, so no
-build step is needed. To regenerate them:
+`http://localhost:8000/api/health` should report `"llm_configured": true` and `"auth_configured": true`.
+
+### 3. Frontend
+
+In a second terminal:
 
 ```bash
+cd frontend
+npm install
+cp .env.example .env          # Windows Command Prompt: copy .env.example .env
+npm run dev
+```
+
+The defaults in `frontend/.env` need no changes for local development: the dev server forwards `/api` to
+`http://localhost:8000`.
+
+### 4. Sign in
+
+Open **http://localhost:5173**. Sign in as `demo` or `developer`, with the password you set in `backend/.env`. Try:
+
+- *Show all employees hired after January 2024.* (135 rows)
+- *Show all customers.* then *Only those from California.* (343 rows)
+- *Who won the FIFA World Cup?* (refused)
+
+The very first question after a restart can take longer, because Bedrock prepares each response format once.
+Later questions take about 10–20 seconds.
+
+### 5. Run the tests (optional)
+
+```bash
+cd backend
+pytest -q                     # 137 tests, no network or API key needed
+ruff check .
+cd ../frontend
+npm run typecheck
+```
+
+### Other ways to run it
+
+**Single process.** The backend also serves the built UI, so one server is enough:
+
+```bash
+cd frontend && npm run build          # writes frontend/dist
+cd ../backend && uvicorn main:app --port 8000
+# open http://localhost:8000
+```
+
+**Terminal client.** Ask questions without the UI:
+
+```bash
+cd backend
+python scripts/ask.py "Show all employees hired after January 2024."
+python scripts/ask.py --thread demo "Show all customers." "Only those from California."
+python scripts/ask.py --dev "Top 5 customers by revenue"     # also prints the trace and every LLM call
+```
+
+### Regenerating data and docs (optional)
+
+```bash
+cd backend
 pip install -e ".[data]"
 python scripts/generate_data.py --xlsx   # deterministic synthetic data (+ Excel copy)
 python scripts/build_knowledge.py        # data dictionary, knowledge graph, relations_graph.html
@@ -142,31 +236,16 @@ pip install -e ".[docs]" && python -m playwright install chromium
 python scripts/export_docs_pdf.py        # README + docs/*.md → docs/pdf/*.pdf
 ```
 
-### 2. Frontend
+### Troubleshooting
 
-```bash
-cd frontend
-npm install
-cp .env.example .env
-npm run dev                           # http://localhost:5173 (proxies /api to :8000)
-```
-
-### 3. Single-process mode (as deployed)
-
-```bash
-cd frontend && npm run build          # writes frontend/dist
-cd ../backend && uvicorn main:app --port 8000
-# http://localhost:8000 serves the UI and the API
-```
-
-### 4. Terminal client (optional)
-
-```bash
-cd backend
-python scripts/ask.py "Show all employees hired after January 2024."
-python scripts/ask.py --thread demo "Show all customers." "Only those from California."
-python scripts/ask.py --dev "Top 5 customers by revenue"     # also prints the trace and every LLM call
-```
+| Symptom | Cause and fix |
+|---|---|
+| `check_llm.py` prints `[skip] AWS_BEARER_TOKEN_BEDROCK is not set` | The key is missing from `backend/.env`, or the file is not in `backend/` |
+| `check_llm.py` fails with `AccessDeniedException` or `UnrecognizedClientException` | The key is invalid or expired, or it has no access to Claude Haiku 5.5. Check the key and that `AWS_REGION=us-west-2` |
+| Login says the username or password is wrong | The passwords come from `backend/.env`. Restart the backend after changing them |
+| The UI shows network errors | The backend is not running on port 8000, or `VITE_DEV_PROXY_TARGET` in `frontend/.env` points elsewhere |
+| "Too many questions — please wait" | The per-IP rate limit (6 per minute, 60 per day). Raise `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_DAY` for local testing |
+| `npm run dev` fails on an old Node version | Install Node 20 or newer |
 
 ## Using the app
 
@@ -471,6 +550,43 @@ on Bedrock is checked with `scripts/check_llm.py` and `scripts/ask.py`.
 | [docs/assumptions.md](docs/assumptions.md) | Assumptions and design decisions |
 | `docs/pdf/` | PDF versions of all of the above and this README |
 
+## Deployment
+
+The backend and the frontend are hosted separately, both on free plans:
+
+```mermaid
+flowchart LR
+    U[Browser] -->|"static UI"| V[Vercel<br/>frontend/dist]
+    U -->|"REST + SSE · Bearer token"| R[Render web service<br/>FastAPI + agent, Python 3.12]
+    R -->|Converse API| B[[AWS Bedrock<br/>Claude Haiku 5.5]]
+```
+
+### Backend on Render
+
+[`render.yaml`](render.yaml) describes the service: Python runtime, `backend/` as root, `pip install -e .`, a single
+uvicorn worker, health check on `/api/health`.
+
+1. Render → **New → Blueprint** → select this repository.
+2. Enter the secret values when prompted: `AWS_BEARER_TOKEN_BEDROCK`, `AUTH_NORMAL_PASSWORD`, `AUTH_DEV_PASSWORD`,
+   and `CORS_ORIGINS` (the Vercel URL as a JSON list, e.g. `["https://<project>.vercel.app"]`). `AUTH_SECRET` is
+   generated automatically. Optionally set `CORS_ORIGIN_REGEX` to also allow Vercel preview URLs.
+3. Every push to the repository redeploys the service.
+
+### Frontend on Vercel
+
+1. Vercel → **Add New → Project** → import this repository, with **Root Directory** `frontend`.
+   [`frontend/vercel.json`](frontend/vercel.json) sets the Vite build and the single-page-app fallback.
+2. Add the environment variable `VITE_API_BASE_URL` = the Render URL (e.g. `https://<service>.onrender.com`), then
+   deploy.
+
+### Free-plan behaviour
+
+- The Render service **sleeps after 15 minutes without traffic**. The first request then takes up to a minute; the
+  login page shows a "waking the server up" notice while it starts.
+- The free plan has **no persistent disk**: chats, run history and conversation memory reset when the service
+  restarts or redeploys. The sample database and knowledge base are part of the repository, so they are unaffected.
+- Login uses a Bearer token (no cookies), so calling the API from the Vercel domain needs only CORS.
+
 ## Limitations and next steps
 
 - **SQLite only for execution.** PostgreSQL and MySQL versions are translated (sqlglot) but not executed.
@@ -479,4 +595,5 @@ on Bedrock is checked with `scripts/check_llm.py` and `scripts/ask.py`.
   layer written.
 - **In-memory rate limiter.** Fine for a single instance; use Redis for horizontal scaling.
 - **No accuracy benchmark.** A golden-question evaluation set was deliberately left out of scope for now.
-- **Docker and deployment** are the next step.
+- **Free hosting.** The demo sleeps when idle and does not keep chats across restarts (see
+  [Free-plan behaviour](#free-plan-behaviour)).

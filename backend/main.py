@@ -56,7 +56,8 @@ def create_app(services: AppServices | None = None) -> FastAPI:
     app = FastAPI(title="SQL Query Agent", version="1.0.0", lifespan=lifespan,
                   description="LangGraph agent that turns natural language into validated, read-only SQL.")
     app.state.services = services
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"],
+    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins,
+                       allow_origin_regex=settings.cors_origin_regex, allow_methods=["*"],
                        allow_headers=["*"], expose_headers=["Content-Disposition", "Retry-After"])
     install_error_handlers(app)
 

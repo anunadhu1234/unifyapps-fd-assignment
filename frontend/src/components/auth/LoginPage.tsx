@@ -5,6 +5,9 @@ import type { Role, User } from '../../api/types'
 import { useAuth } from '../../context/AuthContext'
 import { cn } from '../../lib/cn'
 import { Button } from '../ui/Button'
+import { Spinner } from '../ui/Spinner'
+
+const WAKE_HINT_AFTER_MS = 3000
 
 const ROLE_INFO: Record<Role, { title: string; icon: ReactNode; sees: string[] }> = {
   normal: {
@@ -19,7 +22,7 @@ const ROLE_INFO: Record<Role, { title: string; icon: ReactNode; sees: string[] }
   },
 }
 
-/** Sign in with one of the two test accounts (credentials are in the README). */
+/** Sign in with one of the two test accounts (passwords are shared with reviewers). */
 export function LoginPage() {
   const { login } = useAuth()
   const [username, setUsername] = useState('')
@@ -28,9 +31,20 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [accounts, setAccounts] = useState<User[]>([])
+  // The free hosting tier sleeps when idle; if the first call is slow, say why instead of looking broken.
+  const [waking, setWaking] = useState(false)
 
   useEffect(() => {
-    api.accounts().then(setAccounts).catch(() => setAccounts([]))
+    const timer = window.setTimeout(() => setWaking(true), WAKE_HINT_AFTER_MS)
+    api
+      .accounts()
+      .then(setAccounts)
+      .catch(() => setAccounts([]))
+      .finally(() => {
+        window.clearTimeout(timer)
+        setWaking(false)
+      })
+    return () => window.clearTimeout(timer)
   }, [])
 
   const submit = async (e: FormEvent) => {
@@ -69,7 +83,12 @@ export function LoginPage() {
 
         <section className="p-8">
           <h2 className="text-lg font-semibold">Sign in</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Use one of the two test accounts from the README.</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Choose one of the two test accounts and enter its password.</p>
+          {waking && (
+            <p role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
+              <Spinner className="h-3 w-3 shrink-0" /> Waking the server up — the free host sleeps when idle, so this can take up to a minute.
+            </p>
+          )}
 
           <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {accounts.map((a) => (
