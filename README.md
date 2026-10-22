@@ -547,7 +547,7 @@ on Bedrock is checked with `scripts/check_llm.py` and `scripts/ask.py`.
 | [docs/workflow.md](docs/workflow.md) | The LangGraph: compiled graph, state, every node, routing rules, walkthroughs |
 | [docs/prompts.md](docs/prompts.md) | Every prompt in full, with its node, version, model tier and output contract |
 | [docs/database.md](docs/database.md) | Schema, ER diagram, column meanings and values, metrics, glossary |
-| [docs/assumptions.md](docs/assumptions.md) | Assumptions and design decisions |
+| [docs/assumptions.md](docs/assumptions.md) | The five main assumptions made during development |
 | `docs/pdf/` | PDF versions of all of the above and this README |
 
 ## Deployment

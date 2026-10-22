@@ -27,5 +27,11 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Local AI assistant settings
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+
 # Assignment brief (kept locally, not part of the submission)
 FD Engineer Hiring Assignment.pdf
