@@ -9,10 +9,10 @@ AWS Bedrock**.
 
 ### Test logins
 
-| Account | Username | Password | What it shows |
-|---|---|---|---|
-| Normal user | `demo` | `demo-sql-2026` | The end-user experience: chat, SQL, explanation, results, CSV, cost, validation, pipeline summary |
-| Developer | `developer` | `dev-sql-2026` | Everything above, plus the **Dev** and **Runs** tabs (trace, every LLM call with tokens, cost and time, run history), the prompt library and the knowledge graph |
+| Account | Username | What it shows |
+|---|---|---|
+| Normal user | `demo` | The end-user experience: chat, SQL, explanation, results, CSV, cost, validation, pipeline summary |
+| Developer | `developer` | Everything above, plus the **Dev** and **Runs** tabs (trace, every LLM call with tokens, cost and time, run history), the prompt library and the knowledge graph |
 
 Both logins are defined in `backend/.env` (`AUTH_NORMAL_*`, `AUTH_DEV_*`) and can be changed there.
 
