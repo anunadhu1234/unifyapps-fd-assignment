@@ -1,28 +1,29 @@
-import { Code2, Cpu, Database, Eye, EyeOff, LogIn, ShieldCheck, User as UserIcon } from 'lucide-react'
+import { Building2, Cpu, Eye, EyeOff, Lock, User as UserIcon } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../../api/client'
 import type { Role, User } from '../../api/types'
 import { useAuth } from '../../context/AuthContext'
 import { cn } from '../../lib/cn'
-import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
+import { LoginShowcase } from './LoginShowcase'
+import { NetworkLines } from './NetworkLines'
 
 const WAKE_HINT_AFTER_MS = 3000
 
-const ROLE_INFO: Record<Role, { title: string; icon: ReactNode; sees: string[] }> = {
+const ROLE_INFO: Record<Role, { title: string; icon: ReactNode; sees: string }> = {
   normal: {
     title: 'Business user',
-    icon: <UserIcon size={16} />,
-    sees: ['Chat in plain English', 'SQL, explanation and results', 'Validation checks and cost estimate'],
+    icon: <UserIcon size={15} />,
+    sees: 'Chat in plain English: SQL, explanation, results and cost estimate.',
   },
   dev: {
     title: 'Developer',
-    icon: <Cpu size={16} />,
-    sees: ['Everything a business user sees', 'Model routing and every LLM call (tokens, cost)', 'Plan, retrieval, validation attempts, node trace, prompts'],
+    icon: <Cpu size={15} />,
+    sees: 'Everything a business user sees, plus the pipeline trace, every LLM call (tokens, cost) and run history.',
   },
 }
 
-/** Sign in with one of the two test accounts (passwords are shared with reviewers). */
+/** Full-screen sign-in: product showcase on the left, the form on the right. */
 export function LoginPage() {
   const { login } = useAuth()
   const [username, setUsername] = useState('')
@@ -47,6 +48,8 @@ export function LoginPage() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  const selected = accounts.find((a) => a.username === username.trim().toLowerCase())
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
@@ -61,102 +64,98 @@ export function LoginPage() {
   }
 
   return (
-    <div className="app-canvas flex min-h-full items-center justify-center px-4 py-10">
-      <div className="relative grid w-full max-w-4xl overflow-hidden rounded-3xl border border-zinc-200/70 bg-white lg:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900" style={{ boxShadow: '0 24px 60px -24px rgba(30,27,75,0.32)' }}>
-        <section className="bg-brand-panel flex flex-col justify-between gap-8 p-8 text-white">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 shadow-inner ring-1 ring-white/15"><Database size={20} /></div>
-              <span className="text-lg font-semibold">SQL Query Agent</span>
-            </div>
-            <h1 className="mt-8 text-2xl leading-snug font-semibold">Ask your database questions in plain English.</h1>
-            <p className="mt-3 text-sm text-brand-100">
-              A LangGraph agent that plans, writes, validates and explains read-only SQL over the Summit Supply Co.
-              database — and optimizes or debugs the SQL you paste.
-            </p>
-          </div>
-          <ul className="space-y-2.5 text-sm text-brand-50">
-            <Feature icon={<ShieldCheck size={15} />}>Every query validated against the real schema — read-only, always</Feature>
-            <Feature icon={<Code2 size={15} />}>SQL, plain-English explanation, results, cost estimate</Feature>
-          </ul>
-        </section>
+    <div className="grid min-h-full lg:grid-cols-[1.08fr_1fr]">
+      <LoginShowcase />
 
-        <section className="p-8">
-          <h2 className="text-lg font-semibold">Sign in</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Choose one of the two test accounts and enter its password.</p>
+      <main className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-white px-6 py-16 dark:bg-zinc-950">
+        <NetworkLines />
+
+        <div className="relative w-full max-w-[400px]">
+          {/* client logo placeholder: a deployment shows the customer's own mark here */}
+          <div className="flex flex-col items-center text-center">
+            <span className="grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-brand-500 via-brand-600 to-violet-600 text-white shadow-brand ring-4 ring-brand-100 dark:ring-brand-950">
+              <Building2 size={28} strokeWidth={2} />
+            </span>
+            <p className="mt-3 text-xl font-semibold tracking-tight text-brand-800 dark:text-brand-200">Client</p>
+            <p className="mt-5 text-[15px] text-zinc-600 dark:text-zinc-400">Please enter your login details</p>
+          </div>
+
           {waking && (
-            <p role="status" className="mt-3 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950/40 dark:text-brand-300">
+            <p role="status" className="mt-5 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950/50 dark:text-brand-300">
               <Spinner className="h-3 w-3 shrink-0" /> Waking the server up — the free host sleeps when idle, so this can take up to a minute.
             </p>
           )}
 
-          <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {accounts.map((a) => (
-              <button
-                key={a.username}
-                type="button"
-                onClick={() => setUsername(a.username)}
-                className={cn(
-                  'rounded-xl border p-3 text-left transition-colors',
-                  username === a.username
-                    ? 'border-brand-400 bg-brand-50/60 dark:border-brand-600 dark:bg-brand-950/40'
-                    : 'border-zinc-200 hover:border-zinc-300 dark:border-zinc-700 dark:hover:border-zinc-600',
-                )}
-              >
-                <p className="flex items-center gap-1.5 text-sm font-semibold">
-                  <span className="text-brand-600 dark:text-brand-400">{ROLE_INFO[a.role].icon}</span>
-                  {ROLE_INFO[a.role].title}
-                </p>
-                <p className="mt-0.5 font-mono text-[11px] text-zinc-500">{a.username}</p>
-                <ul className="mt-2 space-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {ROLE_INFO[a.role].sees.map((s) => <li key={s}>• {s}</li>)}
-                </ul>
-              </button>
-            ))}
-          </div>
-
-          <form onSubmit={submit} className="mt-5 space-y-3">
-            <Field label="Username">
-              <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required
-                className="h-10 w-full bg-transparent px-3 text-sm outline-none" />
-            </Field>
-            <Field label="Password">
-              <div className="flex items-center">
-                <input type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password" required className="h-10 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" />
-                <button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}
-                  className="px-3 text-zinc-400 hover:text-zinc-600">
-                  {show ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+          {accounts.length > 0 && (
+            <div className="mt-6">
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" role="radiogroup" aria-label="Test account">
+                {accounts.map((a) => (
+                  <button
+                    key={a.username}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected?.username === a.username}
+                    onClick={() => setUsername(a.username)}
+                    className={cn(
+                      'flex h-9 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all',
+                      selected?.username === a.username
+                        ? 'bg-white text-brand-700 shadow-sm ring-1 ring-brand-200 dark:bg-zinc-800 dark:text-brand-300 dark:ring-brand-800'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200',
+                    )}
+                  >
+                    {ROLE_INFO[a.role].icon}
+                    {ROLE_INFO[a.role].title}
+                  </button>
+                ))}
               </div>
+              <p className="mt-2 min-h-[2.5rem] text-center text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                {selected ? ROLE_INFO[selected.role].sees : 'Choose a test account to see what it can access.'}
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={submit} className="mt-4 space-y-3.5">
+            <Field icon={<UserIcon size={16} />}>
+              <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required
+                placeholder="Username" aria-label="Username"
+                className="h-12 min-w-0 flex-1 bg-transparent pr-4 text-[15px] outline-none placeholder:text-zinc-400" />
             </Field>
+            <Field icon={<Lock size={16} />}>
+              <input type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password" required placeholder="Password" aria-label="Password"
+                className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-zinc-400" />
+              <button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}
+                className="px-4 text-zinc-400 transition-colors hover:text-brand-600">
+                {show ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </Field>
+
             {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-            <Button type="submit" variant="primary" className="h-10 w-full" icon={<LogIn size={16} />} disabled={busy}>
-              {busy ? 'Signing in…' : 'Sign in'}
-            </Button>
+
+            <button type="submit" disabled={busy}
+              className="bg-brand-pill shadow-brand mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60">
+              {busy && <Spinner className="h-4 w-4" />}
+              {busy ? 'Signing in…' : 'Login'}
+            </button>
           </form>
-        </section>
-      </div>
+
+          <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+            Test passwords are shared with reviewers
+          </p>
+          <p className="mt-10 text-center text-[11px] font-semibold tracking-[0.28em] text-zinc-400 lg:hidden">
+            POWERED BY SQL QUERY AGENT
+          </p>
+        </div>
+      </main>
     </div>
   )
 }
 
-function Feature({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+function Field({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <li className="flex items-start gap-2">
-      <span className="mt-0.5 shrink-0">{icon}</span>
+    <label className="flex items-center rounded-xl border border-brand-100 bg-brand-50/60 text-zinc-800 transition-shadow focus-within:border-brand-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-500/10 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus-within:border-brand-500 dark:focus-within:bg-zinc-900 dark:focus-within:ring-brand-500/20">
+      <span className="pl-4 pr-3 text-brand-400">{icon}</span>
       {children}
-    </li>
-  )
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
-      <div className="mt-1 rounded-lg border border-zinc-200 focus-within:border-brand-400 focus-within:ring-4 focus-within:ring-brand-500/10 dark:border-zinc-700">
-        {children}
-      </div>
     </label>
   )
 }
