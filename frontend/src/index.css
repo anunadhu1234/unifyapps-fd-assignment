@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+/* Dark mode follows the `dark` class on <html> (set before first paint in index.html). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─────────────────────────────────────────────────────────────
+   Design tokens — same system as the Pathways AI workspace
+   (gradient sidebar, gradient pill input, shimmering progress),
+   anchored on an indigo / royal-blue brand instead of red.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+  --color-brand-950: #1e1b4b;
+
+  /* Text ink: a deep brand-tinted near-black, like the workspace's warm ink. */
+  --color-ink: #1b1840;
+}
+
+:root {
+  --brand: #4f46e5;
+  --brand-dark: #3730a3;
+  --brand-deep: #312e81;
+
+  /* Sidebar / login panel: radial highlight over a vertical brand gradient. */
+  --brand-panel: radial-gradient(135% 55% at 50% -10%, rgba(255, 255, 255, 0.14), transparent 60%),
+    linear-gradient(177deg, #5148e6 0%, #4338ca 44%, #3730a3 80%, #2b2675 100%);
+  --brand-pill: linear-gradient(90deg, #4f46e5 0%, #3730a3 100%);
+
+  --shadow-brand: 0 18px 44px -18px rgba(79, 70, 229, 0.55);
+  --shadow-bubble: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 14px 30px -14px rgba(55, 48, 163, 0.65);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-white text-ink antialiased dark:bg-zinc-950 dark:text-zinc-100;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  }
+  /* Code must show exactly what is typed: ">=" stays ">=", never a ligature glyph. */
+  code,
+  pre,
+  .font-mono {
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
+  }
+  ::selection {
+    background: rgba(79, 70, 229, 0.18);
+    color: #312e81;
+  }
+}
+
+@layer utilities {
+  .bg-brand-panel {
+    background: var(--brand-panel);
+  }
+  .bg-brand-pill {
+    background: var(--brand-pill);
+  }
+  .shadow-brand {
+    box-shadow: var(--shadow-brand);
+  }
+  .shadow-bubble {
+    box-shadow: var(--shadow-bubble);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(55, 48, 163, 0.25) transparent;
+  }
+  .scrollbar-on-brand {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  }
+  .animate-fade-in {
+    animation: fade-in 160ms ease-out both;
+  }
+  .animate-fade-up {
+    animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  /* Shimmering progress caption (the "Thinking…" line while an answer is produced). */
+  .animate-shine {
+    background: linear-gradient(100deg, rgba(55, 48, 163, 0.35) 20%, rgba(79, 70, 229, 0.95) 45%, rgba(55, 48, 163, 0.35) 70%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: shine-sweep 2.2s linear infinite;
+  }
+  .dark .animate-shine {
+    background-image: linear-gradient(100deg, rgba(165, 180, 252, 0.35) 20%, rgba(199, 210, 254, 1) 45%, rgba(165, 180, 252, 0.35) 70%);
+  }
+}
+
+/* App canvas — clean white workspace with a barely-there dotted grid faded at the edges. */
+.app-canvas {
+  position: relative;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfe 60%, #f8f8fd 100%);
+}
+.app-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(30, 27, 75, 0.05) 1px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, #000 30%, transparent 100%);
+  pointer-events: none;
+}
+.dark .app-canvas {
+  background: #09090b;
+}
+.dark .app-canvas::before {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shine-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Markdown rendered inside answers and the schema answer panel. */
+.prose-chat {
+  @apply text-[15px] leading-relaxed text-ink/90 dark:text-zinc-200;
+}
+.prose-chat p {
+  @apply my-2 first:mt-0 last:mb-0;
+}
+.prose-chat ul {
+  @apply my-2 list-disc space-y-1 pl-5;
+}
+.prose-chat ol {
+  @apply my-2 list-decimal space-y-1 pl-5;
+}
+.prose-chat code {
+  @apply rounded bg-brand-50 px-1 py-0.5 font-mono text-[0.85em] text-brand-700 dark:bg-zinc-800 dark:text-brand-300;
+}
+.prose-chat pre {
+  @apply my-2 overflow-x-auto rounded-lg bg-zinc-100 p-3 dark:bg-zinc-900;
+}
+.prose-chat pre code {
+  @apply bg-transparent p-0 text-zinc-800 dark:text-zinc-200;
+}
+.prose-chat table {
+  @apply my-2 w-full border-collapse text-xs;
+}
+.prose-chat th,
+.prose-chat td {
+  @apply border border-zinc-200 px-2 py-1 text-left dark:border-zinc-700;
+}
+.prose-chat th {
+  @apply bg-zinc-50 font-semibold dark:bg-zinc-900;
+}
+.prose-chat strong {
+  @apply font-semibold text-ink dark:text-zinc-50;
+}
+.prose-chat a {
+  @apply text-brand-600 underline underline-offset-2 dark:text-brand-400;
+}

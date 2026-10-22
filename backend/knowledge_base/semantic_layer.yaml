@@ -1,0 +1,584 @@
+# Semantic layer — the hand-written meaning of the Summit Supply Co. database.
+#
+# This file is the human source of truth for WHAT the data means. The build
+# script (scripts/build_knowledge.py) profiles the live database for what the
+# data CONTAINS (types, keys, distinct values, ranges) and merges both into
+#   knowledge_base/data_dictionary.json   (column-level reference)
+#   knowledge_base/knowledge_graph.json   (tables, relationships, metrics, terms as a graph)
+#
+# The build fails if anything here names a table/column that does not exist,
+# if a database column is left undocumented, or if a metric's SQL does not run.
+
+version: 1
+
+domain:
+  company: Summit Supply Co.
+  description: >-
+    Summit Supply Co. is a US omnichannel retailer selling electronics, computers, office supplies,
+    furniture, home & kitchen, sports, books and health products to consumers and businesses.
+    The database covers customers, orders and order lines, the product catalog, and the workforce.
+  dialect: sqlite
+  currency: USD
+  as_of_date: "2026-10-20"
+
+conventions:
+  - id: dates_iso_text
+    rule: >-
+      Dates are ISO-8601 TEXT 'YYYY-MM-DD' with no time part. Compare them with string literals
+      (OrderDate >= '2024-01-01'), bucket with strftime('%Y', col) / strftime('%Y-%m', col), and
+      compute day differences with julianday(a) - julianday(b).
+  - id: relative_dates
+    rule: >-
+      The data is a snapshot as of {as_of_date}. Resolve relative periods ("last month", "this year",
+      "last 90 days") against '{as_of_date}' — e.g. date('{as_of_date}', '-90 days') — not date('now').
+  - id: calendar_periods
+    rule: The fiscal year is the calendar year; quarters are calendar quarters (Q1 = Jan–Mar).
+  - id: state_codes
+    rule: >-
+      State columns (Customers.State, Employees.State, Orders.ShipState) hold 2-letter USPS codes
+      such as 'CA' or 'NY', never full names. "California" must become 'CA'.
+  - id: revenue_definition
+    rule: >-
+      "Revenue" / "sales" means net revenue: SUM(OrderItems.Quantity * OrderItems.UnitPrice *
+      (1 - OrderItems.Discount)) over orders whose Status is not 'Cancelled' or 'Returned', excluding
+      shipping — unless the user explicitly asks to include those.
+  - id: sale_price_vs_list_price
+    rule: >-
+      OrderItems.UnitPrice is the price charged at the time of sale; Products.UnitPrice is today's list
+      price. Always use OrderItems.UnitPrice for sales figures.
+  - id: order_value
+    rule: >-
+      Orders has no total column. An order's value is the sum of its lines
+      (Quantity * UnitPrice * (1 - Discount)); add Orders.ShippingCost only when asked for the amount billed.
+  - id: discount_fraction
+    rule: OrderItems.Discount is a fraction from 0 to 0.30 (0.10 = 10% off), not a percentage.
+  - id: customer_vs_ship_location
+    rule: >-
+      "Customers from X" filters Customers.State (where the customer lives). "Orders shipped to X"
+      filters Orders.ShipState (delivery destination). About 10% of orders ship to a different state.
+  - id: two_employee_links
+    rule: >-
+      Customers link to Employees in two different ways: Customers.AccountManagerID is the customer's
+      assigned account manager (business customers only); Orders.EmployeeID is the sales rep who booked
+      a particular order (NULL for self-service online consumer orders). Pick the one the question means.
+  - id: current_employees
+    rule: >-
+      Current employees have Status IN ('Active', 'On Leave'). Former employees keep their row with
+      Status 'Terminated' and a TerminationDate.
+  - id: include_zero_rows
+    rule: >-
+      Some customers have never ordered and some products have never sold. Use LEFT JOIN when the
+      question asks to include them, or NOT EXISTS / LEFT JOIN ... IS NULL to find them.
+  - id: boolean_flags
+    rule: Products.IsDiscontinued is an INTEGER flag (1 = discontinued, 0 = still sold).
+
+tables:
+  Customers:
+    description: People and businesses who have an account with Summit Supply Co.
+    grain: One row per customer account.
+    synonyms: [customer, clients, client, buyers, accounts, shoppers, purchasers]
+    columns:
+      CustomerID: {description: Unique customer identifier.}
+      FirstName: {description: First name of the customer (or the business's main contact)., synonyms: [first name, given name]}
+      LastName: {description: Last name of the customer (or the business's main contact)., synonyms: [last name, surname, family name]}
+      CompanyName:
+        description: Business name for Small Business and Corporate customers; NULL for consumers.
+        synonyms: [company, business name, organisation, organization, account name]
+      Email: {description: Contact email address (unique)., synonyms: [email address, e-mail]}
+      Phone: {description: Contact phone number; NULL when the customer did not provide one., synonyms: [phone number, telephone, contact number]}
+      City: {description: City of the customer's address., synonyms: [customer city, town]}
+      State:
+        description: 2-letter USPS code of the state the customer lives in.
+        semantic_type: us_state
+        synonyms: [customer state, home state, location, region]
+      PostalCode: {description: ZIP code of the customer's address., synonyms: [zip, zip code, postcode]}
+      Segment:
+        description: Customer type.
+        synonyms: [customer segment, customer type, market segment]
+        values:
+          Consumer: {meaning: Individual shopper buying for personal use., synonyms: [b2c, individuals, individual, retail customers, consumers, personal]}
+          Small Business: {meaning: Small company account., synonyms: [smb, sme, small businesses, small company]}
+          Corporate: {meaning: "Large company account, usually with an account manager and bank-transfer terms.", synonyms: [enterprise, corporate accounts, large accounts, corporates, corporations]}
+      LoyaltyTier:
+        description: Loyalty tier based on lifetime spend on delivered orders.
+        synonyms: [tier, loyalty level, membership tier, loyalty status]
+        values:
+          Bronze: {meaning: "Lifetime delivered spend under $1,000 (includes customers who never ordered)."}
+          Silver: {meaning: "Lifetime delivered spend from $1,000 to under $5,000."}
+          Gold: {meaning: "Lifetime delivered spend from $5,000 to under $25,000."}
+          Platinum: {meaning: "Lifetime delivered spend of $25,000 or more.", synonyms: [vip, top tier]}
+      SignupDate: {description: Date the customer created their account., synonyms: [signup date, registration date, join date, customer since, joined]}
+      AccountManagerID:
+        description: >-
+          Employee assigned as the customer's account manager (Small Business and Corporate customers
+          only; NULL for consumers).
+        synonyms: [account manager, account owner, relationship manager, assigned rep]
+
+  Employees:
+    description: Everyone who works or has worked at Summit Supply Co., including the org chart.
+    grain: One row per employee (former employees are kept with Status 'Terminated').
+    synonyms: [employee, staff, workers, workforce, personnel, team members, people, reps, sales reps]
+    columns:
+      EmployeeID: {description: Unique employee identifier.}
+      FirstName: {description: Employee's first name., synonyms: [first name, given name]}
+      LastName: {description: Employee's last name., synonyms: [last name, surname]}
+      Email: {description: Work email address (unique)., synonyms: [work email, email address]}
+      JobTitle: {description: Current job title., synonyms: [title, role, position, designation]}
+      Department:
+        description: Department the employee belongs to.
+        synonyms: [dept, team, function, business unit, division]
+        values:
+          Executive: {meaning: C-suite leadership., synonyms: [leadership, c-suite, executives, management team]}
+          Sales: {meaning: "Sales reps, account executives and sales management.", synonyms: [sales team, salesforce]}
+          Marketing: {meaning: Marketing and brand team.}
+          Engineering: {meaning: "Software, data, QA and DevOps engineers.", synonyms: [tech, technology, developers, r&d, it department]}
+          Product: {meaning: "Product management, design and research.", synonyms: [product management, pm]}
+          Customer Support: {meaning: Customer service team., synonyms: [support, customer service, cs, helpdesk]}
+          Operations: {meaning: "Warehouse, logistics, inventory and procurement.", synonyms: [ops, logistics, warehouse, supply chain]}
+          Finance: {meaning: "Accounting, FP&A and payroll.", synonyms: [accounting, fp&a]}
+          Human Resources: {meaning: People team and recruiting., synonyms: [hr, people team, recruiting]}
+      ManagerID: {description: EmployeeID of the employee's direct manager; NULL only for the CEO., synonyms: [manager, boss, supervisor, reports to, line manager]}
+      HireDate: {description: Date the employee joined., synonyms: [hire date, start date, joining date, date of joining, hired]}
+      TerminationDate: {description: Last day of employment; NULL for current employees., synonyms: [termination date, exit date, leaving date, end date]}
+      Salary: {description: Annual base salary in USD (pro-rated for part-time staff)., unit: USD, synonyms: [pay, compensation, wage, annual salary, ctc]}
+      EmploymentType:
+        description: Contract type.
+        synonyms: [employment type, contract type, worker type]
+        values:
+          Full-Time: {meaning: Permanent full-time employee., synonyms: [full time, ft, permanent]}
+          Part-Time: {meaning: Permanent part-time employee., synonyms: [part time, pt]}
+          Contract: {meaning: Fixed-term contractor., synonyms: [contractor, contractors, temp, temporary]}
+      Status:
+        description: Employment status.
+        synonyms: [employment status, employee status]
+        values:
+          Active: {meaning: Currently employed and working., synonyms: [currently working, currently employed]}
+          On Leave: {meaning: Currently employed but on leave., synonyms: [leave, on leave]}
+          Terminated: {meaning: No longer with the company (see TerminationDate)., synonyms: [former employees, ex-employees, resigned, departed, terminated, fired, left the company]}
+      City: {description: "City the employee works from (office city, or home city for remote staff).", synonyms: [office, work location]}
+      State: {description: 2-letter USPS code of the state the employee works from., semantic_type: us_state, synonyms: [work state]}
+
+  Products:
+    description: The product catalog.
+    grain: One row per product (SKU).
+    synonyms: [product, items, item, catalog, catalogue, merchandise, goods, skus, inventory]
+    columns:
+      ProductID: {description: Unique product identifier.}
+      ProductName: {description: Product name including its brand., synonyms: [product name, item name, product]}
+      SKU: {description: "Stock-keeping unit code (unique), prefixed by a category code.", synonyms: [sku code, product code, item code]}
+      Category:
+        description: Product category.
+        synonyms: [product category, category, product line, department]
+        values:
+          Electronics: {meaning: Consumer electronics and gadgets., synonyms: [gadgets, consumer electronics, electronic]}
+          Computers & Accessories: {meaning: "Laptops, monitors, tablets and computer peripherals.", synonyms: [computers, laptops, pc accessories, computer accessories, it equipment]}
+          Office Supplies: {meaning: Stationery and office consumables., synonyms: [stationery, office products, supplies]}
+          Furniture: {meaning: Office and home furniture., synonyms: [office furniture, chairs, desks]}
+          Home & Kitchen: {meaning: Kitchen appliances and home goods., synonyms: [kitchen, appliances, home goods, home and kitchen]}
+          Sports & Outdoors: {meaning: Fitness and outdoor equipment., synonyms: [sports, fitness, outdoor, outdoors, sporting goods]}
+          Books: {meaning: Printed books., synonyms: [book, publications]}
+          Health & Personal Care: {meaning: Health devices and personal care products., synonyms: [health, personal care, wellness, health and personal care]}
+      Brand: {description: Brand name., synonyms: [manufacturer, make, label]}
+      UnitPrice: {description: "Current list price in USD (what it would sell for today, before discounts).", unit: USD, synonyms: [list price, price, current price, msrp, retail price]}
+      UnitCost: {description: Current unit cost to Summit Supply in USD (used for profit and inventory value)., unit: USD, synonyms: [cost, cost price, unit cost, cogs per unit]}
+      StockQuantity: {description: Units currently in stock., synonyms: [stock, inventory, quantity on hand, units in stock, on hand]}
+      ReorderLevel: {description: Stock level at or below which the product should be reordered., synonyms: [reorder point, minimum stock, safety stock]}
+      IsDiscontinued:
+        description: 1 if the product is no longer sold, 0 if it is still sold.
+        synonyms: [discontinued, retired, inactive product]
+      LaunchDate: {description: Date the product was first available for sale., synonyms: [launch date, release date, introduced]}
+
+  Orders:
+    description: Customer orders (one header row per order), including payment and fulfilment status.
+    grain: One row per order. Line items are in OrderItems.
+    synonyms: [order, purchases, purchase, sales orders, transactions, transaction, bookings]
+    columns:
+      OrderID: {description: Unique order identifier., synonyms: [order number, order id]}
+      CustomerID: {description: The customer who placed the order.}
+      EmployeeID:
+        description: >-
+          The employee (sales rep) who booked the order; NULL for self-service online orders from
+          consumers.
+        synonyms: [sales rep, salesperson, booked by, handled by, rep]
+      OrderDate: {description: Date the order was placed., synonyms: [order date, purchase date, date ordered, placed on]}
+      Status:
+        description: Fulfilment status of the order as of the snapshot date.
+        synonyms: [order status, state of the order, fulfilment status]
+        values:
+          Pending: {meaning: Placed but not yet being processed., synonyms: [unprocessed, awaiting processing, not yet processed]}
+          Processing: {meaning: Being picked and packed., synonyms: [in progress, being prepared]}
+          Shipped: {meaning: "Handed to the carrier, not yet delivered.", synonyms: [in transit, dispatched, on the way]}
+          Delivered: {meaning: Delivered to the customer., synonyms: [completed, fulfilled, received]}
+          Cancelled: {meaning: Cancelled before shipping., synonyms: [canceled, cancelled orders]}
+          Returned: {meaning: Delivered and then sent back; the payment was refunded., synonyms: [returns, returned orders, sent back]}
+      Channel:
+        description: Sales channel the order came through.
+        synonyms: [sales channel, order channel, source]
+        values:
+          Online: {meaning: Placed on the website., synonyms: [web, website, e-commerce, ecommerce, internet]}
+          Phone: {meaning: Placed by phone with a rep., synonyms: [call center, telephone, phone order]}
+          In-Store: {meaning: Bought in a physical store (collected immediately)., synonyms: [retail store, offline, walk-in, in store, in-store purchases]}
+          Partner: {meaning: Placed through a reseller or marketplace partner., synonyms: [reseller, marketplace, affiliate, partners]}
+      PaymentMethod:
+        description: How the order was paid for.
+        synonyms: [payment method, payment type, paid with, payment mode]
+        values:
+          Credit Card: {meaning: Credit or debit card., synonyms: [card, credit card payments, debit card]}
+          PayPal: {meaning: PayPal.}
+          Bank Transfer: {meaning: Invoice paid by bank transfer on net terms (mostly business customers)., synonyms: [wire, ach, invoice, wire transfer]}
+          Gift Card: {meaning: Store gift card., synonyms: [voucher, store credit, gift voucher]}
+          Digital Wallet: {meaning: Apple Pay / Google Pay style mobile wallet., synonyms: [apple pay, google pay, mobile wallet]}
+      PaymentStatus:
+        description: Payment state of the order as of the snapshot date.
+        synonyms: [payment status, paid status, billing status]
+        values:
+          Paid: {meaning: Payment received., synonyms: [settled, completed payment, collected]}
+          Pending: {meaning: Payment not yet received (open invoice or awaiting capture)., synonyms: [unpaid, outstanding, open invoice, awaiting payment, receivable]}
+          Refunded: {meaning: Payment was returned to the customer., synonyms: [refund, refunds, reversed]}
+          Voided: {meaning: Order cancelled before any payment was captured., synonyms: [void, not charged]}
+      ShippingCost: {description: Shipping fee charged to the customer in USD (0 for free shipping or in-store)., unit: USD, synonyms: [shipping, shipping fee, delivery charge, freight]}
+      ShippedDate: {description: Date the order left the warehouse; NULL if not shipped yet or cancelled., synonyms: [ship date, dispatch date, shipped on]}
+      DeliveredDate: {description: Date the order was delivered; NULL if not delivered (yet)., synonyms: [delivery date, delivered on, received date]}
+      ShipCity: {description: Delivery destination city., synonyms: [shipping city, destination city, delivery city]}
+      ShipState: {description: 2-letter USPS code of the delivery destination state., semantic_type: us_state, synonyms: [shipping state, destination state, delivery state, shipped to]}
+
+  OrderItems:
+    description: Order lines — which products were bought in each order, how many, and at what price.
+    grain: One row per product per order.
+    synonyms: [order item, order lines, line items, order details, basket items]
+    columns:
+      OrderItemID: {description: Unique order-line identifier.}
+      OrderID: {description: The order this line belongs to.}
+      ProductID: {description: The product bought on this line.}
+      Quantity: {description: Units bought., synonyms: [qty, units, quantity, number of units]}
+      UnitPrice: {description: "Price per unit charged at the time of sale, before the line discount (USD).", unit: USD, synonyms: [sale price, selling price, price paid]}
+      Discount: {description: Discount on this line as a fraction (0.10 = 10% off)., synonyms: [discount rate, markdown, promo, promotion]}
+
+# Join descriptions keyed by the foreign-key column ("Table.Column"). Keys and
+# targets come from the database's own FOREIGN KEY constraints.
+relationships:
+  Customers.AccountManagerID: The employee who manages this business customer's account.
+  Employees.ManagerID: Org chart — the employee's direct manager (self-join on Employees).
+  Orders.CustomerID: The customer who placed the order.
+  Orders.EmployeeID: The sales rep who booked the order.
+  OrderItems.OrderID: The order a line belongs to.
+  OrderItems.ProductID: The product on an order line.
+
+metrics:
+  - name: Net Revenue
+    synonyms: [revenue, sales, net sales, total sales, sales amount, turnover, income, earnings, money made]
+    description: Line value after discounts, excluding cancelled and returned orders and shipping.
+    expression: SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount))
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: true
+
+  - name: Gross Revenue
+    synonyms: [gross sales, revenue before discounts, list revenue]
+    description: Line value before discounts, excluding cancelled and returned orders.
+    expression: SUM(oi.Quantity * oi.UnitPrice)
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: true
+
+  - name: Discount Amount
+    synonyms: [discounts given, total discount, markdowns, promo spend]
+    description: Money given away through line discounts on non-cancelled, non-returned orders.
+    expression: SUM(oi.Quantity * oi.UnitPrice * oi.Discount)
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: true
+
+  - name: Units Sold
+    synonyms: [quantity sold, units, items sold, volume, number of units sold]
+    description: Units on non-cancelled, non-returned orders.
+    expression: SUM(oi.Quantity)
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: units
+    additive: true
+
+  - name: Order Count
+    synonyms: [number of orders, orders, order volume, how many orders, total orders]
+    description: Number of orders of any status. Exclude 'Cancelled' when the user says successful / valid orders.
+    expression: COUNT(DISTINCT o.OrderID)
+    from: Orders o
+    unit: orders
+    additive: true
+
+  - name: Average Order Value
+    synonyms: [aov, average basket, average order size, avg order value, basket size]
+    description: Net revenue divided by the number of non-cancelled, non-returned orders.
+    expression: SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)) / COUNT(DISTINCT o.OrderID)
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: false
+
+  - name: Gross Profit
+    synonyms: [profit, margin, margin dollars, gross margin dollars]
+    description: Net revenue minus product cost (current UnitCost) on non-cancelled, non-returned orders.
+    expression: SUM(oi.Quantity * (oi.UnitPrice * (1 - oi.Discount) - p.UnitCost))
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID JOIN Products p ON p.ProductID = oi.ProductID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: true
+
+  - name: Gross Margin %
+    synonyms: [margin %, profit margin, gross margin, margin percentage, gm]
+    description: Gross profit as a percentage of net revenue.
+    expression: >-
+      100.0 * SUM(oi.Quantity * (oi.UnitPrice * (1 - oi.Discount) - p.UnitCost))
+      / SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount))
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID JOIN Products p ON p.ProductID = oi.ProductID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: percent
+    additive: false
+
+  - name: Cancellation Rate %
+    synonyms: [cancel rate, cancellation rate, cancelled orders rate]
+    description: Share of all orders that were cancelled.
+    expression: 100.0 * SUM(CASE WHEN o.Status = 'Cancelled' THEN 1 ELSE 0 END) / COUNT(*)
+    from: Orders o
+    unit: percent
+    additive: false
+
+  - name: Return Rate %
+    synonyms: [returns rate, return rate, rate of returns]
+    description: Share of delivered orders that were returned.
+    expression: >-
+      100.0 * SUM(CASE WHEN o.Status = 'Returned' THEN 1 ELSE 0 END)
+      / SUM(CASE WHEN o.Status IN ('Delivered', 'Returned') THEN 1 ELSE 0 END)
+    from: Orders o
+    unit: percent
+    additive: false
+
+  - name: Average Days to Ship
+    synonyms: [time to ship, shipping time, fulfilment time, fulfillment time, processing time, dispatch time]
+    description: Average days between order and shipment, over shipped orders.
+    expression: AVG(julianday(o.ShippedDate) - julianday(o.OrderDate))
+    from: Orders o
+    filters: ["o.ShippedDate IS NOT NULL"]
+    unit: days
+    additive: false
+
+  - name: Average Days to Deliver
+    synonyms: [delivery time, time to deliver, lead time, order to delivery time]
+    description: Average days between order and delivery, over delivered orders.
+    expression: AVG(julianday(o.DeliveredDate) - julianday(o.OrderDate))
+    from: Orders o
+    filters: ["o.DeliveredDate IS NOT NULL"]
+    unit: days
+    additive: false
+
+  - name: Customer Lifetime Value
+    synonyms: [clv, ltv, lifetime value, customer value, average spend per customer]
+    description: Net revenue per customer who has bought at least once.
+    expression: SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)) / COUNT(DISTINCT o.CustomerID)
+    from: OrderItems oi JOIN Orders o ON o.OrderID = oi.OrderID
+    filters: ["o.Status NOT IN ('Cancelled', 'Returned')"]
+    unit: USD
+    additive: false
+
+  - name: Outstanding Payments
+    synonyms: [accounts receivable, receivables, unpaid amount, open invoices, amount owed]
+    description: Value billed (lines after discount plus shipping) on orders whose payment is still Pending.
+    query: >-
+      SELECT SUM(t.billed) AS value FROM (
+        SELECT o.OrderID, SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)) + o.ShippingCost AS billed
+        FROM Orders o JOIN OrderItems oi ON oi.OrderID = o.OrderID
+        WHERE o.PaymentStatus = 'Pending'
+        GROUP BY o.OrderID, o.ShippingCost) t
+    unit: USD
+    additive: true
+
+  - name: Repeat Customer Rate %
+    synonyms: [repeat rate, repeat purchase rate, returning customer rate, retention rate]
+    description: Share of buying customers with two or more non-cancelled orders.
+    query: >-
+      SELECT 100.0 * SUM(CASE WHEN n >= 2 THEN 1 ELSE 0 END) / COUNT(*) AS value FROM (
+        SELECT o.CustomerID, COUNT(*) AS n FROM Orders o
+        WHERE o.Status <> 'Cancelled' GROUP BY o.CustomerID) t
+    unit: percent
+    additive: false
+
+  - name: Headcount
+    synonyms: [number of employees, employee count, staff count, how many employees, workforce size]
+    description: Current employees (Active or On Leave).
+    expression: COUNT(*)
+    from: Employees e
+    filters: ["e.Status IN ('Active', 'On Leave')"]
+    unit: employees
+    additive: true
+
+  - name: Average Salary
+    synonyms: [mean salary, average pay, avg salary, average compensation]
+    description: Average annual salary of current employees.
+    expression: AVG(e.Salary)
+    from: Employees e
+    filters: ["e.Status IN ('Active', 'On Leave')"]
+    unit: USD
+    additive: false
+
+  - name: Total Payroll
+    synonyms: [payroll, salary cost, compensation cost, wage bill, salary expense]
+    description: Sum of annual salaries of current employees.
+    expression: SUM(e.Salary)
+    from: Employees e
+    filters: ["e.Status IN ('Active', 'On Leave')"]
+    unit: USD
+    additive: true
+
+  - name: Attrition Rate %
+    synonyms: [attrition, turnover rate, employee turnover, churn rate of employees]
+    description: Share of everyone ever employed who has left. Filter TerminationDate for a specific period.
+    expression: 100.0 * SUM(CASE WHEN e.Status = 'Terminated' THEN 1 ELSE 0 END) / COUNT(*)
+    from: Employees e
+    unit: percent
+    additive: false
+
+  - name: Average Tenure (years)
+    synonyms: [tenure, average tenure, years of service, time at company]
+    description: Average years since hire for current employees, as of the snapshot date.
+    expression: AVG((julianday('{as_of_date}') - julianday(e.HireDate)) / 365.25)
+    from: Employees e
+    filters: ["e.Status IN ('Active', 'On Leave')"]
+    unit: years
+    additive: false
+
+  - name: Inventory Value
+    synonyms: [stock value, value of inventory, inventory worth]
+    description: Units in stock times unit cost, for products still sold.
+    expression: SUM(p.StockQuantity * p.UnitCost)
+    from: Products p
+    filters: ["p.IsDiscontinued = 0"]
+    unit: USD
+    additive: true
+
+glossary:
+  - term: active customer
+    synonyms: [active customers, active buyers]
+    definition: A customer with at least one non-cancelled order in the 12 months before the snapshot date.
+    sql: "EXISTS (SELECT 1 FROM Orders o WHERE o.CustomerID = c.CustomerID AND o.Status <> 'Cancelled' AND o.OrderDate > date('{as_of_date}', '-12 months'))"
+    applies_to: Customers c
+
+  - term: churned customer
+    synonyms: [churned, lapsed customers, inactive customers, lost customers]
+    definition: A customer who has ordered before but not in the 12 months before the snapshot date.
+    sql: "EXISTS (SELECT 1 FROM Orders o WHERE o.CustomerID = c.CustomerID) AND NOT EXISTS (SELECT 1 FROM Orders o WHERE o.CustomerID = c.CustomerID AND o.OrderDate > date('{as_of_date}', '-12 months'))"
+    applies_to: Customers c
+
+  - term: new customer
+    synonyms: [new customers, new signups, newly acquired customers]
+    definition: A customer whose SignupDate falls in the period being asked about.
+    sql: "c.SignupDate >= :period_start"
+    applies_to: Customers c
+
+  - term: repeat customer
+    synonyms: [repeat customers, returning customers, loyal customers, repeat buyers]
+    definition: A customer with two or more non-cancelled orders.
+    sql: "(SELECT COUNT(*) FROM Orders o WHERE o.CustomerID = c.CustomerID AND o.Status <> 'Cancelled') >= 2"
+    applies_to: Customers c
+
+  - term: customers without orders
+    synonyms: [customers who never ordered, never purchased, no orders, inactive accounts]
+    definition: Customers with no rows in Orders.
+    sql: "NOT EXISTS (SELECT 1 FROM Orders o WHERE o.CustomerID = c.CustomerID)"
+    applies_to: Customers c
+
+  - term: b2b
+    synonyms: [business customers, business accounts, b2b customers]
+    definition: Small Business and Corporate customers.
+    sql: "c.Segment IN ('Small Business', 'Corporate')"
+    applies_to: Customers c
+
+  - term: b2c
+    synonyms: [consumer customers, individual customers]
+    definition: Consumer customers.
+    sql: "c.Segment = 'Consumer'"
+    applies_to: Customers c
+
+  - term: top customers
+    synonyms: [best customers, biggest customers, highest spending customers, most valuable customers]
+    definition: Customers ranked by a measure — by Net Revenue unless the user names another (order count, units).
+    ambiguous: true
+    default: rank by Net Revenue, descending
+    alternatives: [rank by Order Count, rank by Units Sold]
+
+  - term: best-selling products
+    synonyms: [best sellers, top products, top selling products, most popular products, top sellers]
+    definition: Products ranked by Units Sold unless the user asks for revenue.
+    ambiguous: true
+    default: rank by Units Sold, descending
+    alternatives: [rank by Net Revenue]
+
+  - term: high-value order
+    synonyms: [large orders, big orders, high value orders]
+    definition: An order whose net line value is at least $1,000.
+    sql: "(SELECT SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)) FROM OrderItems oi WHERE oi.OrderID = o.OrderID) >= 1000"
+    applies_to: Orders o
+
+  - term: open orders
+    synonyms: [open order, unfulfilled orders, orders in progress, outstanding orders]
+    definition: Orders not yet delivered, cancelled or returned.
+    sql: "o.Status IN ('Pending', 'Processing', 'Shipped')"
+    applies_to: Orders o
+
+  - term: late shipment
+    synonyms: [late shipments, delayed orders, slow shipments, shipped late]
+    definition: An order shipped more than 3 days after it was placed.
+    sql: "julianday(o.ShippedDate) - julianday(o.OrderDate) > 3"
+    applies_to: Orders o
+
+  - term: overdue invoice
+    synonyms: [overdue invoices, overdue payments, late payments]
+    definition: A bank-transfer order still unpaid more than 45 days after it was placed.
+    sql: "o.PaymentMethod = 'Bank Transfer' AND o.PaymentStatus = 'Pending' AND o.OrderDate < date('{as_of_date}', '-45 days')"
+    applies_to: Orders o
+
+  - term: weekend orders
+    synonyms: [weekend, weekends, orders on weekends]
+    definition: Orders placed on Saturday or Sunday.
+    sql: "strftime('%w', o.OrderDate) IN ('0', '6')"
+    applies_to: Orders o
+
+  - term: current employees
+    synonyms: [current staff, employees today, existing employees, active employees]
+    definition: Employees with Status 'Active' or 'On Leave'.
+    sql: "e.Status IN ('Active', 'On Leave')"
+    applies_to: Employees e
+
+  - term: new hire
+    synonyms: [new hires, new joiners, recently hired, recent hires]
+    definition: An employee hired in the 90 days before the snapshot date (or in the period asked about).
+    sql: "e.HireDate > date('{as_of_date}', '-90 days')"
+    applies_to: Employees e
+
+  - term: manager
+    synonyms: [managers, people managers, team leads with reports]
+    definition: >-
+      An employee with at least one direct report (someone whose ManagerID points to them). Note
+      that JobTitle containing 'Manager' is a different, narrower test.
+    sql: "EXISTS (SELECT 1 FROM Employees r WHERE r.ManagerID = e.EmployeeID)"
+    applies_to: Employees e
+
+  - term: low stock
+    synonyms: [low inventory, needs reorder, products to reorder, running low]
+    definition: A product still sold whose stock is at or below its reorder level.
+    sql: "p.IsDiscontinued = 0 AND p.StockQuantity <= p.ReorderLevel"
+    applies_to: Products p
+
+  - term: out of stock
+    synonyms: [out-of-stock, sold out, no stock]
+    definition: A product with zero units in stock.
+    sql: "p.StockQuantity = 0"
+    applies_to: Products p
+
+  - term: products never ordered
+    synonyms: [unsold products, products with no sales, never sold, never been ordered, never ordered, not been ordered]
+    definition: Products that appear on no order line.
+    sql: "NOT EXISTS (SELECT 1 FROM OrderItems oi WHERE oi.ProductID = p.ProductID)"
+    applies_to: Products p

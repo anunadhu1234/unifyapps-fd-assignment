@@ -1,0 +1,135 @@
+# Curated, validated question → SQL pairs.
+# The example retriever shows the planner and SQL writer the 2-3 most similar ones
+# (style and conventions only). tests/test_examples.py runs every query through
+# the validator and executes it, so an example can never teach invalid SQL.
+
+examples:
+  - question: Show all employees hired after January 2024.
+    sql: |
+      SELECT e.EmployeeID, e.FirstName, e.LastName, e.JobTitle, e.Department, e.HireDate
+      FROM Employees e
+      WHERE e.HireDate >= '2024-01-01'
+      ORDER BY e.HireDate
+
+  - question: Show all customers from California.
+    sql: |
+      SELECT c.CustomerID, c.FirstName, c.LastName, c.CompanyName, c.City, c.State, c.Segment
+      FROM Customers c
+      WHERE c.State = 'CA'
+      ORDER BY c.LastName, c.FirstName
+
+  - question: What was the net revenue by product category in 2025?
+    sql: |
+      SELECT p.Category AS category,
+             ROUND(SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)), 2) AS net_revenue
+      FROM OrderItems oi
+      JOIN Orders o ON o.OrderID = oi.OrderID
+      JOIN Products p ON p.ProductID = oi.ProductID
+      WHERE o.Status NOT IN ('Cancelled', 'Returned')
+        AND o.OrderDate BETWEEN '2025-01-01' AND '2025-12-31'
+      GROUP BY p.Category
+      ORDER BY net_revenue DESC
+
+  - question: Who are our top 10 customers by revenue?
+    sql: |
+      SELECT c.CustomerID, c.FirstName, c.LastName, c.CompanyName,
+             ROUND(SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)), 2) AS net_revenue
+      FROM Customers c
+      JOIN Orders o ON o.CustomerID = c.CustomerID
+      JOIN OrderItems oi ON oi.OrderID = o.OrderID
+      WHERE o.Status NOT IN ('Cancelled', 'Returned')
+      GROUP BY c.CustomerID, c.FirstName, c.LastName, c.CompanyName
+      ORDER BY net_revenue DESC
+      LIMIT 10
+
+  - question: How many orders were placed each month in 2025?
+    sql: |
+      SELECT strftime('%Y-%m', o.OrderDate) AS month, COUNT(*) AS order_count
+      FROM Orders o
+      WHERE o.OrderDate BETWEEN '2025-01-01' AND '2025-12-31'
+      GROUP BY month
+      ORDER BY month
+
+  - question: What is the average order value by customer segment?
+    sql: |
+      SELECT c.Segment AS segment,
+             ROUND(SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)) / COUNT(DISTINCT o.OrderID), 2)
+               AS average_order_value
+      FROM Orders o
+      JOIN Customers c ON c.CustomerID = o.CustomerID
+      JOIN OrderItems oi ON oi.OrderID = o.OrderID
+      WHERE o.Status NOT IN ('Cancelled', 'Returned')
+      GROUP BY c.Segment
+      ORDER BY average_order_value DESC
+
+  - question: List each employee with their manager's name.
+    sql: |
+      SELECT e.EmployeeID, e.FirstName || ' ' || e.LastName AS employee, e.JobTitle,
+             m.FirstName || ' ' || m.LastName AS manager
+      FROM Employees e
+      LEFT JOIN Employees m ON m.EmployeeID = e.ManagerID
+      ORDER BY e.EmployeeID
+
+  - question: What is the current headcount and average salary by department?
+    sql: |
+      SELECT e.Department AS department, COUNT(*) AS headcount, ROUND(AVG(e.Salary), 2) AS average_salary
+      FROM Employees e
+      WHERE e.Status IN ('Active', 'On Leave')
+      GROUP BY e.Department
+      ORDER BY headcount DESC
+
+  - question: Which products have never been ordered?
+    sql: |
+      SELECT p.ProductID, p.ProductName, p.Category, p.LaunchDate
+      FROM Products p
+      WHERE NOT EXISTS (SELECT 1 FROM OrderItems oi WHERE oi.ProductID = p.ProductID)
+      ORDER BY p.ProductName
+
+  - question: Which customers have not ordered in the last 12 months?
+    sql: |
+      SELECT c.CustomerID, c.FirstName, c.LastName, MAX(o.OrderDate) AS last_order_date
+      FROM Customers c
+      JOIN Orders o ON o.CustomerID = c.CustomerID
+      GROUP BY c.CustomerID, c.FirstName, c.LastName
+      HAVING MAX(o.OrderDate) <= date('2026-10-20', '-12 months')
+      ORDER BY last_order_date DESC
+
+  - question: Rank sales reps by the revenue of the orders they booked in 2025.
+    sql: |
+      SELECT e.EmployeeID, e.FirstName, e.LastName,
+             COUNT(DISTINCT o.OrderID) AS orders_booked,
+             ROUND(SUM(oi.Quantity * oi.UnitPrice * (1 - oi.Discount)), 2) AS net_revenue
+      FROM Employees e
+      JOIN Orders o ON o.EmployeeID = e.EmployeeID
+      JOIN OrderItems oi ON oi.OrderID = o.OrderID
+      WHERE o.Status NOT IN ('Cancelled', 'Returned')
+        AND o.OrderDate BETWEEN '2025-01-01' AND '2025-12-31'
+      GROUP BY e.EmployeeID, e.FirstName, e.LastName
+      ORDER BY net_revenue DESC
+
+  - question: What is the return rate by product category?
+    sql: |
+      SELECT p.Category AS category,
+             ROUND(100.0 * COUNT(DISTINCT CASE WHEN o.Status = 'Returned' THEN o.OrderID END)
+                   / COUNT(DISTINCT CASE WHEN o.Status IN ('Delivered', 'Returned') THEN o.OrderID END), 1)
+               AS return_rate_pct
+      FROM Orders o
+      JOIN OrderItems oi ON oi.OrderID = o.OrderID
+      JOIN Products p ON p.ProductID = oi.ProductID
+      GROUP BY p.Category
+      ORDER BY return_rate_pct DESC
+
+  - question: Which products are low on stock?
+    sql: |
+      SELECT p.ProductID, p.ProductName, p.StockQuantity, p.ReorderLevel
+      FROM Products p
+      WHERE p.IsDiscontinued = 0 AND p.StockQuantity <= p.ReorderLevel
+      ORDER BY p.StockQuantity
+
+  - question: How many customers does each account manager look after?
+    sql: |
+      SELECT e.EmployeeID, e.FirstName, e.LastName, COUNT(c.CustomerID) AS customers_managed
+      FROM Employees e
+      JOIN Customers c ON c.AccountManagerID = e.EmployeeID
+      GROUP BY e.EmployeeID, e.FirstName, e.LastName
+      ORDER BY customers_managed DESC

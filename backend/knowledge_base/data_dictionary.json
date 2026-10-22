@@ -1,0 +1,2770 @@
+{
+  "meta": {
+    "title": "Data Dictionary — Summit Supply Co.",
+    "database": "company.db",
+    "dialect": "sqlite",
+    "currency": "USD",
+    "as_of_date": "2026-10-20",
+    "generated_on": "2026-10-22",
+    "generated_from": "Live profile of the SQLite database merged with knowledge_base/semantic_layer.yaml.",
+    "domain": "Summit Supply Co. is a US omnichannel retailer selling electronics, computers, office supplies, furniture, home & kitchen, sports, books and health products to consumers and businesses. The database covers customers, orders and order lines, the product catalog, and the workforce.",
+    "row_counts": {
+      "Employees": 333,
+      "Customers": 3000,
+      "Products": 111,
+      "Orders": 16613,
+      "OrderItems": 30449
+    }
+  },
+  "conventions": [
+    {
+      "id": "dates_iso_text",
+      "rule": "Dates are ISO-8601 TEXT 'YYYY-MM-DD' with no time part. Compare them with string literals (OrderDate >= '2024-01-01'), bucket with strftime('%Y', col) / strftime('%Y-%m', col), and compute day differences with julianday(a) - julianday(b)."
+    },
+    {
+      "id": "relative_dates",
+      "rule": "The data is a snapshot as of 2026-10-20. Resolve relative periods (\"last month\", \"this year\", \"last 90 days\") against '2026-10-20' — e.g. date('2026-10-20', '-90 days') — not date('now')."
+    },
+    {
+      "id": "calendar_periods",
+      "rule": "The fiscal year is the calendar year; quarters are calendar quarters (Q1 = Jan–Mar)."
+    },
+    {
+      "id": "state_codes",
+      "rule": "State columns (Customers.State, Employees.State, Orders.ShipState) hold 2-letter USPS codes such as 'CA' or 'NY', never full names. \"California\" must become 'CA'."
+    },
+    {
+      "id": "revenue_definition",
+      "rule": "\"Revenue\" / \"sales\" means net revenue: SUM(OrderItems.Quantity * OrderItems.UnitPrice * (1 - OrderItems.Discount)) over orders whose Status is not 'Cancelled' or 'Returned', excluding shipping — unless the user explicitly asks to include those."
+    },
+    {
+      "id": "sale_price_vs_list_price",
+      "rule": "OrderItems.UnitPrice is the price charged at the time of sale; Products.UnitPrice is today's list price. Always use OrderItems.UnitPrice for sales figures."
+    },
+    {
+      "id": "order_value",
+      "rule": "Orders has no total column. An order's value is the sum of its lines (Quantity * UnitPrice * (1 - Discount)); add Orders.ShippingCost only when asked for the amount billed."
+    },
+    {
+      "id": "discount_fraction",
+      "rule": "OrderItems.Discount is a fraction from 0 to 0.30 (0.10 = 10% off), not a percentage."
+    },
+    {
+      "id": "customer_vs_ship_location",
+      "rule": "\"Customers from X\" filters Customers.State (where the customer lives). \"Orders shipped to X\" filters Orders.ShipState (delivery destination). About 10% of orders ship to a different state."
+    },
+    {
+      "id": "two_employee_links",
+      "rule": "Customers link to Employees in two different ways: Customers.AccountManagerID is the customer's assigned account manager (business customers only); Orders.EmployeeID is the sales rep who booked a particular order (NULL for self-service online consumer orders). Pick the one the question means."
+    },
+    {
+      "id": "current_employees",
+      "rule": "Current employees have Status IN ('Active', 'On Leave'). Former employees keep their row with Status 'Terminated' and a TerminationDate."
+    },
+    {
+      "id": "include_zero_rows",
+      "rule": "Some customers have never ordered and some products have never sold. Use LEFT JOIN when the question asks to include them, or NOT EXISTS / LEFT JOIN ... IS NULL to find them."
+    },
+    {
+      "id": "boolean_flags",
+      "rule": "Products.IsDiscontinued is an INTEGER flag (1 = discontinued, 0 = still sold)."
+    }
+  ],
+  "tables": {
+    "Employees": {
+      "description": "Everyone who works or has worked at Summit Supply Co., including the org chart.",
+      "grain": "One row per employee (former employees are kept with Status 'Terminated').",
+      "synonyms": [
+        "employee",
+        "staff",
+        "workers",
+        "workforce",
+        "personnel",
+        "team members",
+        "people",
+        "reps",
+        "sales reps"
+      ],
+      "row_count": 333,
+      "primary_key": [
+        "EmployeeID"
+      ],
+      "foreign_keys": [
+        "Employees.ManagerID → Employees.EmployeeID"
+      ],
+      "referenced_by": [
+        "Customers.AccountManagerID",
+        "Employees.ManagerID",
+        "Orders.EmployeeID"
+      ],
+      "indexes": [
+        {
+          "name": "idx_employees_manager",
+          "columns": [
+            "ManagerID"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "sqlite_autoindex_Employees_1",
+          "columns": [
+            "Email"
+          ],
+          "unique": true,
+          "origin": "UNIQUE constraint"
+        },
+        {
+          "name": "(rowid)",
+          "columns": [
+            "EmployeeID"
+          ],
+          "unique": true,
+          "origin": "PRIMARY KEY"
+        }
+      ],
+      "columns": {
+        "EmployeeID": {
+          "type": "INTEGER",
+          "role": "primary_key",
+          "nullable": false,
+          "description": "Unique employee identifier.",
+          "synonyms": [],
+          "stats": {
+            "distinct": 333,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 333
+          }
+        },
+        "FirstName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Employee's first name.",
+          "synonyms": [
+            "first name",
+            "given name"
+          ],
+          "stats": {
+            "distinct": 195,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Joseph",
+            "Christopher",
+            "John",
+            "Daniel",
+            "James"
+          ]
+        },
+        "LastName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Employee's last name.",
+          "synonyms": [
+            "last name",
+            "surname"
+          ],
+          "stats": {
+            "distinct": 228,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Johnson",
+            "Smith",
+            "Wilson",
+            "Robinson",
+            "Williams"
+          ]
+        },
+        "Email": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Work email address (unique).",
+          "synonyms": [
+            "work email",
+            "email address"
+          ],
+          "stats": {
+            "distinct": 333,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "aaron.frost@summitsupply.com",
+            "aaron.mitchell@summitsupply.com",
+            "aaron.nguyen@summitsupply.com",
+            "adam.wise@summitsupply.com",
+            "alejandro.vaughan@summitsupply.com"
+          ]
+        },
+        "JobTitle": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Current job title.",
+          "synonyms": [
+            "title",
+            "role",
+            "position",
+            "designation"
+          ],
+          "stats": {
+            "distinct": 53,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Account Executive",
+              "count": 31
+            },
+            {
+              "value": "Support Specialist",
+              "count": 30
+            },
+            {
+              "value": "Sales Representative",
+              "count": 24
+            },
+            {
+              "value": "QA Engineer",
+              "count": 16
+            },
+            {
+              "value": "Senior Software Engineer",
+              "count": 16
+            },
+            {
+              "value": "Senior Support Specialist",
+              "count": 16
+            },
+            {
+              "value": "Software Engineer",
+              "count": 15
+            },
+            {
+              "value": "Warehouse Associate",
+              "count": 14
+            },
+            {
+              "value": "Senior Sales Representative",
+              "count": 13
+            },
+            {
+              "value": "Sales Development Representative",
+              "count": 12
+            },
+            {
+              "value": "DevOps Engineer",
+              "count": 10
+            },
+            {
+              "value": "Inventory Analyst",
+              "count": 9
+            },
+            {
+              "value": "Procurement Specialist",
+              "count": 8
+            },
+            {
+              "value": "Digital Marketing Analyst",
+              "count": 7
+            },
+            {
+              "value": "Logistics Coordinator",
+              "count": 7
+            },
+            {
+              "value": "Marketing Specialist",
+              "count": 7
+            },
+            {
+              "value": "Content Strategist",
+              "count": 6
+            },
+            {
+              "value": "Engineering Manager",
+              "count": 6
+            },
+            {
+              "value": "Recruiter",
+              "count": 6
+            },
+            {
+              "value": "Sales Manager",
+              "count": 6
+            },
+            {
+              "value": "Data Engineer",
+              "count": 5
+            },
+            {
+              "value": "Financial Analyst",
+              "count": 5
+            },
+            {
+              "value": "Senior Accountant",
+              "count": 5
+            },
+            {
+              "value": "Senior Product Manager",
+              "count": 5
+            },
+            {
+              "value": "Product Designer",
+              "count": 4
+            },
+            {
+              "value": "Support Manager",
+              "count": 4
+            },
+            {
+              "value": "Support Team Lead",
+              "count": 4
+            },
+            {
+              "value": "Accountant",
+              "count": 3
+            },
+            {
+              "value": "HR Generalist",
+              "count": 3
+            },
+            {
+              "value": "Marketing Manager",
+              "count": 3
+            },
+            {
+              "value": "Operations Manager",
+              "count": 3
+            },
+            {
+              "value": "Product Manager",
+              "count": 3
+            },
+            {
+              "value": "Brand Designer",
+              "count": 2
+            },
+            {
+              "value": "Finance Manager",
+              "count": 2
+            },
+            {
+              "value": "Group Product Manager",
+              "count": 2
+            },
+            {
+              "value": "Payroll Specialist",
+              "count": 2
+            },
+            {
+              "value": "Staff Engineer",
+              "count": 2
+            },
+            {
+              "value": "UX Researcher",
+              "count": 2
+            },
+            {
+              "value": "Chief Executive Officer",
+              "count": 1
+            },
+            {
+              "value": "Chief Financial Officer",
+              "count": 1
+            },
+            {
+              "value": "Chief Operating Officer",
+              "count": 1
+            },
+            {
+              "value": "Chief Revenue Officer",
+              "count": 1
+            },
+            {
+              "value": "Chief Technology Officer",
+              "count": 1
+            },
+            {
+              "value": "Controller",
+              "count": 1
+            },
+            {
+              "value": "Director of Customer Support",
+              "count": 1
+            },
+            {
+              "value": "Director of Operations",
+              "count": 1
+            },
+            {
+              "value": "Director of People",
+              "count": 1
+            },
+            {
+              "value": "HR Business Partner",
+              "count": 1
+            },
+            {
+              "value": "HR Manager",
+              "count": 1
+            },
+            {
+              "value": "Head of Product",
+              "count": 1
+            },
+            {
+              "value": "VP of Engineering",
+              "count": 1
+            },
+            {
+              "value": "VP of Marketing",
+              "count": 1
+            },
+            {
+              "value": "VP of Sales",
+              "count": 1
+            }
+          ]
+        },
+        "Department": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Department the employee belongs to.",
+          "synonyms": [
+            "dept",
+            "team",
+            "function",
+            "business unit",
+            "division"
+          ],
+          "stats": {
+            "distinct": 9,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Sales",
+              "count": 87,
+              "meaning": "Sales reps, account executives and sales management.",
+              "synonyms": [
+                "sales team",
+                "salesforce"
+              ]
+            },
+            {
+              "value": "Engineering",
+              "count": 71,
+              "meaning": "Software, data, QA and DevOps engineers.",
+              "synonyms": [
+                "tech",
+                "technology",
+                "developers",
+                "r&d",
+                "it department"
+              ]
+            },
+            {
+              "value": "Customer Support",
+              "count": 55,
+              "meaning": "Customer service team.",
+              "synonyms": [
+                "support",
+                "customer service",
+                "cs",
+                "helpdesk"
+              ]
+            },
+            {
+              "value": "Operations",
+              "count": 42,
+              "meaning": "Warehouse, logistics, inventory and procurement.",
+              "synonyms": [
+                "ops",
+                "logistics",
+                "warehouse",
+                "supply chain"
+              ]
+            },
+            {
+              "value": "Marketing",
+              "count": 26,
+              "meaning": "Marketing and brand team.",
+              "synonyms": []
+            },
+            {
+              "value": "Finance",
+              "count": 18,
+              "meaning": "Accounting, FP&A and payroll.",
+              "synonyms": [
+                "accounting",
+                "fp&a"
+              ]
+            },
+            {
+              "value": "Product",
+              "count": 17,
+              "meaning": "Product management, design and research.",
+              "synonyms": [
+                "product management",
+                "pm"
+              ]
+            },
+            {
+              "value": "Human Resources",
+              "count": 12,
+              "meaning": "People team and recruiting.",
+              "synonyms": [
+                "hr",
+                "people team",
+                "recruiting"
+              ]
+            },
+            {
+              "value": "Executive",
+              "count": 5,
+              "meaning": "C-suite leadership.",
+              "synonyms": [
+                "leadership",
+                "c-suite",
+                "executives",
+                "management team"
+              ]
+            }
+          ]
+        },
+        "ManagerID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": true,
+          "description": "EmployeeID of the employee's direct manager; NULL only for the CEO.",
+          "synonyms": [
+            "manager",
+            "boss",
+            "supervisor",
+            "reports to",
+            "line manager"
+          ],
+          "references": "Employees.EmployeeID",
+          "stats": {
+            "distinct": 40,
+            "nulls": 1,
+            "null_pct": 0.3,
+            "min": 1,
+            "max": 166
+          }
+        },
+        "HireDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": false,
+          "description": "Date the employee joined.",
+          "synonyms": [
+            "hire date",
+            "start date",
+            "joining date",
+            "date of joining",
+            "hired"
+          ],
+          "stats": {
+            "distinct": 317,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": "2014-03-03",
+            "max": "2026-10-17"
+          }
+        },
+        "TerminationDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": true,
+          "description": "Last day of employment; NULL for current employees.",
+          "synonyms": [
+            "termination date",
+            "exit date",
+            "leaving date",
+            "end date"
+          ],
+          "stats": {
+            "distinct": 46,
+            "nulls": 287,
+            "null_pct": 86.2,
+            "min": "2021-03-20",
+            "max": "2026-10-17"
+          }
+        },
+        "Salary": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Annual base salary in USD (pro-rated for part-time staff).",
+          "synonyms": [
+            "pay",
+            "compensation",
+            "wage",
+            "annual salary",
+            "ctc"
+          ],
+          "unit": "USD",
+          "stats": {
+            "distinct": 199,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 23000.0,
+            "max": 340000.0,
+            "avg": 105375.38
+          }
+        },
+        "EmploymentType": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Contract type.",
+          "synonyms": [
+            "employment type",
+            "contract type",
+            "worker type"
+          ],
+          "stats": {
+            "distinct": 3,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Full-Time",
+              "count": 315,
+              "meaning": "Permanent full-time employee.",
+              "synonyms": [
+                "full time",
+                "ft",
+                "permanent"
+              ]
+            },
+            {
+              "value": "Part-Time",
+              "count": 10,
+              "meaning": "Permanent part-time employee.",
+              "synonyms": [
+                "part time",
+                "pt"
+              ]
+            },
+            {
+              "value": "Contract",
+              "count": 8,
+              "meaning": "Fixed-term contractor.",
+              "synonyms": [
+                "contractor",
+                "contractors",
+                "temp",
+                "temporary"
+              ]
+            }
+          ]
+        },
+        "Status": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Employment status.",
+          "synonyms": [
+            "employment status",
+            "employee status"
+          ],
+          "stats": {
+            "distinct": 3,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Active",
+              "count": 276,
+              "meaning": "Currently employed and working.",
+              "synonyms": [
+                "currently working",
+                "currently employed"
+              ]
+            },
+            {
+              "value": "Terminated",
+              "count": 46,
+              "meaning": "No longer with the company (see TerminationDate).",
+              "synonyms": [
+                "former employees",
+                "ex-employees",
+                "resigned",
+                "departed",
+                "terminated",
+                "fired",
+                "left the company"
+              ]
+            },
+            {
+              "value": "On Leave",
+              "count": 11,
+              "meaning": "Currently employed but on leave.",
+              "synonyms": [
+                "leave",
+                "on leave"
+              ]
+            }
+          ]
+        },
+        "City": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "City the employee works from (office city, or home city for remote staff).",
+          "synonyms": [
+            "office",
+            "work location"
+          ],
+          "stats": {
+            "distinct": 21,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Austin",
+              "count": 72
+            },
+            {
+              "value": "Seattle",
+              "count": 70
+            },
+            {
+              "value": "San Francisco",
+              "count": 64
+            },
+            {
+              "value": "Dallas",
+              "count": 41
+            },
+            {
+              "value": "New York",
+              "count": 38
+            },
+            {
+              "value": "Chicago",
+              "count": 31
+            },
+            {
+              "value": "Houston",
+              "count": 3
+            },
+            {
+              "value": "Bellevue",
+              "count": 1
+            },
+            {
+              "value": "Brooklyn",
+              "count": 1
+            },
+            {
+              "value": "Cincinnati",
+              "count": 1
+            },
+            {
+              "value": "Denver",
+              "count": 1
+            },
+            {
+              "value": "Detroit",
+              "count": 1
+            },
+            {
+              "value": "Durham",
+              "count": 1
+            },
+            {
+              "value": "Fort Lauderdale",
+              "count": 1
+            },
+            {
+              "value": "Fort Worth",
+              "count": 1
+            },
+            {
+              "value": "Gulfport",
+              "count": 1
+            },
+            {
+              "value": "Jersey City",
+              "count": 1
+            },
+            {
+              "value": "Miami",
+              "count": 1
+            },
+            {
+              "value": "Pittsburgh",
+              "count": 1
+            },
+            {
+              "value": "Raleigh",
+              "count": 1
+            },
+            {
+              "value": "Topeka",
+              "count": 1
+            }
+          ]
+        },
+        "State": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "2-letter USPS code of the state the employee works from.",
+          "synonyms": [
+            "work state"
+          ],
+          "semantic_type": "us_state",
+          "stats": {
+            "distinct": 14,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "TX",
+              "count": 117
+            },
+            {
+              "value": "WA",
+              "count": 71
+            },
+            {
+              "value": "CA",
+              "count": 64
+            },
+            {
+              "value": "NY",
+              "count": 39
+            },
+            {
+              "value": "IL",
+              "count": 31
+            },
+            {
+              "value": "FL",
+              "count": 2
+            },
+            {
+              "value": "NC",
+              "count": 2
+            },
+            {
+              "value": "CO",
+              "count": 1
+            },
+            {
+              "value": "KS",
+              "count": 1
+            },
+            {
+              "value": "MI",
+              "count": 1
+            },
+            {
+              "value": "MS",
+              "count": 1
+            },
+            {
+              "value": "NJ",
+              "count": 1
+            },
+            {
+              "value": "OH",
+              "count": 1
+            },
+            {
+              "value": "PA",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    "Customers": {
+      "description": "People and businesses who have an account with Summit Supply Co.",
+      "grain": "One row per customer account.",
+      "synonyms": [
+        "customer",
+        "clients",
+        "client",
+        "buyers",
+        "accounts",
+        "shoppers",
+        "purchasers"
+      ],
+      "row_count": 3000,
+      "primary_key": [
+        "CustomerID"
+      ],
+      "foreign_keys": [
+        "Customers.AccountManagerID → Employees.EmployeeID"
+      ],
+      "referenced_by": [
+        "Orders.CustomerID"
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_Customers_1",
+          "columns": [
+            "Email"
+          ],
+          "unique": true,
+          "origin": "UNIQUE constraint"
+        },
+        {
+          "name": "(rowid)",
+          "columns": [
+            "CustomerID"
+          ],
+          "unique": true,
+          "origin": "PRIMARY KEY"
+        }
+      ],
+      "columns": {
+        "CustomerID": {
+          "type": "INTEGER",
+          "role": "primary_key",
+          "nullable": false,
+          "description": "Unique customer identifier.",
+          "synonyms": [],
+          "stats": {
+            "distinct": 3000,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 3000
+          }
+        },
+        "FirstName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "First name of the customer (or the business's main contact).",
+          "synonyms": [
+            "first name",
+            "given name"
+          ],
+          "stats": {
+            "distinct": 529,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Michael",
+            "David",
+            "James",
+            "John",
+            "Jennifer"
+          ]
+        },
+        "LastName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Last name of the customer (or the business's main contact).",
+          "synonyms": [
+            "last name",
+            "surname",
+            "family name"
+          ],
+          "stats": {
+            "distinct": 798,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Smith",
+            "Johnson",
+            "Brown",
+            "Williams",
+            "Jones"
+          ]
+        },
+        "CompanyName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": true,
+          "description": "Business name for Small Business and Corporate customers; NULL for consumers.",
+          "synonyms": [
+            "company",
+            "business name",
+            "organisation",
+            "organization",
+            "account name"
+          ],
+          "stats": {
+            "distinct": 971,
+            "nulls": 1994,
+            "null_pct": 66.5
+          },
+          "samples": [
+            "Brown Group",
+            "Brown LLC",
+            "Davis Inc",
+            "Brown and Sons",
+            "Carter LLC"
+          ]
+        },
+        "Email": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Contact email address (unique).",
+          "synonyms": [
+            "email address",
+            "e-mail"
+          ],
+          "stats": {
+            "distinct": 3000,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "aaron.gallegos65@yahoo.com",
+            "aaron.gonzalez@edwardsmiller.com",
+            "aaron.guerrero2@yahoo.com",
+            "aaron.jones1@hotmail.com",
+            "aaron.kelly@olsonthomasandnelson.com"
+          ]
+        },
+        "Phone": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": true,
+          "description": "Contact phone number; NULL when the customer did not provide one.",
+          "synonyms": [
+            "phone number",
+            "telephone",
+            "contact number"
+          ],
+          "stats": {
+            "distinct": 2723,
+            "nulls": 277,
+            "null_pct": 9.2
+          },
+          "samples": [
+            "(201) 541-8046",
+            "(201) 743-5594",
+            "(201) 822-0963",
+            "(202) 248-9110",
+            "(202) 299-1144"
+          ]
+        },
+        "City": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "City of the customer's address.",
+          "synonyms": [
+            "customer city",
+            "town"
+          ],
+          "stats": {
+            "distinct": 139,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Los Angeles",
+            "Houston",
+            "Miami",
+            "New York",
+            "Columbus"
+          ]
+        },
+        "State": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "2-letter USPS code of the state the customer lives in.",
+          "synonyms": [
+            "customer state",
+            "home state",
+            "location",
+            "region"
+          ],
+          "semantic_type": "us_state",
+          "stats": {
+            "distinct": 51,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "CA",
+              "count": 343
+            },
+            {
+              "value": "TX",
+              "count": 258
+            },
+            {
+              "value": "FL",
+              "count": 212
+            },
+            {
+              "value": "NY",
+              "count": 201
+            },
+            {
+              "value": "OH",
+              "count": 128
+            },
+            {
+              "value": "IL",
+              "count": 115
+            },
+            {
+              "value": "PA",
+              "count": 110
+            },
+            {
+              "value": "NJ",
+              "count": 96
+            },
+            {
+              "value": "NC",
+              "count": 86
+            },
+            {
+              "value": "GA",
+              "count": 78
+            },
+            {
+              "value": "MI",
+              "count": 78
+            },
+            {
+              "value": "VA",
+              "count": 75
+            },
+            {
+              "value": "WA",
+              "count": 67
+            },
+            {
+              "value": "IN",
+              "count": 64
+            },
+            {
+              "value": "TN",
+              "count": 64
+            },
+            {
+              "value": "AZ",
+              "count": 63
+            },
+            {
+              "value": "CO",
+              "count": 58
+            },
+            {
+              "value": "MN",
+              "count": 58
+            },
+            {
+              "value": "MO",
+              "count": 55
+            },
+            {
+              "value": "MD",
+              "count": 52
+            },
+            {
+              "value": "LA",
+              "count": 51
+            },
+            {
+              "value": "MA",
+              "count": 50
+            },
+            {
+              "value": "AL",
+              "count": 46
+            },
+            {
+              "value": "SC",
+              "count": 45
+            },
+            {
+              "value": "OR",
+              "count": 43
+            },
+            {
+              "value": "OK",
+              "count": 41
+            },
+            {
+              "value": "UT",
+              "count": 41
+            },
+            {
+              "value": "WI",
+              "count": 40
+            },
+            {
+              "value": "KY",
+              "count": 37
+            },
+            {
+              "value": "CT",
+              "count": 35
+            },
+            {
+              "value": "IA",
+              "count": 29
+            },
+            {
+              "value": "NV",
+              "count": 27
+            },
+            {
+              "value": "AR",
+              "count": 26
+            },
+            {
+              "value": "MS",
+              "count": 26
+            },
+            {
+              "value": "NE",
+              "count": 24
+            },
+            {
+              "value": "KS",
+              "count": 21
+            },
+            {
+              "value": "WV",
+              "count": 20
+            },
+            {
+              "value": "NM",
+              "count": 17
+            },
+            {
+              "value": "ME",
+              "count": 16
+            },
+            {
+              "value": "HI",
+              "count": 15
+            },
+            {
+              "value": "ID",
+              "count": 15
+            },
+            {
+              "value": "NH",
+              "count": 13
+            },
+            {
+              "value": "RI",
+              "count": 11
+            },
+            {
+              "value": "DE",
+              "count": 10
+            },
+            {
+              "value": "MT",
+              "count": 8
+            },
+            {
+              "value": "ND",
+              "count": 7
+            },
+            {
+              "value": "AK",
+              "count": 6
+            },
+            {
+              "value": "VT",
+              "count": 6
+            },
+            {
+              "value": "DC",
+              "count": 5
+            },
+            {
+              "value": "SD",
+              "count": 4
+            },
+            {
+              "value": "WY",
+              "count": 4
+            }
+          ]
+        },
+        "PostalCode": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "ZIP code of the customer's address.",
+          "synonyms": [
+            "zip",
+            "zip code",
+            "postcode"
+          ],
+          "stats": {
+            "distinct": 2940,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "02871",
+            "76117",
+            "02866",
+            "06047",
+            "06379"
+          ]
+        },
+        "Segment": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Customer type.",
+          "synonyms": [
+            "customer segment",
+            "customer type",
+            "market segment"
+          ],
+          "stats": {
+            "distinct": 3,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Consumer",
+              "count": 1994,
+              "meaning": "Individual shopper buying for personal use.",
+              "synonyms": [
+                "b2c",
+                "individuals",
+                "individual",
+                "retail customers",
+                "consumers",
+                "personal"
+              ]
+            },
+            {
+              "value": "Small Business",
+              "count": 676,
+              "meaning": "Small company account.",
+              "synonyms": [
+                "smb",
+                "sme",
+                "small businesses",
+                "small company"
+              ]
+            },
+            {
+              "value": "Corporate",
+              "count": 330,
+              "meaning": "Large company account, usually with an account manager and bank-transfer terms.",
+              "synonyms": [
+                "enterprise",
+                "corporate accounts",
+                "large accounts",
+                "corporates",
+                "corporations"
+              ]
+            }
+          ]
+        },
+        "LoyaltyTier": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Loyalty tier based on lifetime spend on delivered orders.",
+          "synonyms": [
+            "tier",
+            "loyalty level",
+            "membership tier",
+            "loyalty status"
+          ],
+          "stats": {
+            "distinct": 4,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Bronze",
+              "count": 1689,
+              "meaning": "Lifetime delivered spend under $1,000 (includes customers who never ordered).",
+              "synonyms": []
+            },
+            {
+              "value": "Silver",
+              "count": 704,
+              "meaning": "Lifetime delivered spend from $1,000 to under $5,000.",
+              "synonyms": []
+            },
+            {
+              "value": "Gold",
+              "count": 419,
+              "meaning": "Lifetime delivered spend from $5,000 to under $25,000.",
+              "synonyms": []
+            },
+            {
+              "value": "Platinum",
+              "count": 188,
+              "meaning": "Lifetime delivered spend of $25,000 or more.",
+              "synonyms": [
+                "vip",
+                "top tier"
+              ]
+            }
+          ]
+        },
+        "SignupDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": false,
+          "description": "Date the customer created their account.",
+          "synonyms": [
+            "signup date",
+            "registration date",
+            "join date",
+            "customer since",
+            "joined"
+          ],
+          "stats": {
+            "distinct": 1498,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": "2021-06-01",
+            "max": "2026-10-19"
+          }
+        },
+        "AccountManagerID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": true,
+          "description": "Employee assigned as the customer's account manager (Small Business and Corporate customers only; NULL for consumers).",
+          "synonyms": [
+            "account manager",
+            "account owner",
+            "relationship manager",
+            "assigned rep"
+          ],
+          "references": "Employees.EmployeeID",
+          "stats": {
+            "distinct": 52,
+            "nulls": 1994,
+            "null_pct": 66.5,
+            "min": 7,
+            "max": 324
+          }
+        }
+      }
+    },
+    "Products": {
+      "description": "The product catalog.",
+      "grain": "One row per product (SKU).",
+      "synonyms": [
+        "product",
+        "items",
+        "item",
+        "catalog",
+        "catalogue",
+        "merchandise",
+        "goods",
+        "skus",
+        "inventory"
+      ],
+      "row_count": 111,
+      "primary_key": [
+        "ProductID"
+      ],
+      "foreign_keys": [],
+      "referenced_by": [
+        "OrderItems.ProductID"
+      ],
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_Products_1",
+          "columns": [
+            "SKU"
+          ],
+          "unique": true,
+          "origin": "UNIQUE constraint"
+        },
+        {
+          "name": "(rowid)",
+          "columns": [
+            "ProductID"
+          ],
+          "unique": true,
+          "origin": "PRIMARY KEY"
+        }
+      ],
+      "columns": {
+        "ProductID": {
+          "type": "INTEGER",
+          "role": "primary_key",
+          "nullable": false,
+          "description": "Unique product identifier.",
+          "synonyms": [],
+          "stats": {
+            "distinct": 111,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 111
+          }
+        },
+        "ProductName": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Product name including its brand.",
+          "synonyms": [
+            "product name",
+            "item name",
+            "product"
+          ],
+          "stats": {
+            "distinct": 111,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Auralis 4K Streaming Stick",
+            "Auralis E-Reader",
+            "Auralis Fitness Tracker",
+            "Auralis Portable Charger",
+            "Auralis Wireless Earbuds"
+          ]
+        },
+        "SKU": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Stock-keeping unit code (unique), prefixed by a category code.",
+          "synonyms": [
+            "sku code",
+            "product code",
+            "item code"
+          ],
+          "stats": {
+            "distinct": 111,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "BOOK-0001",
+            "BOOK-0002",
+            "BOOK-0003",
+            "BOOK-0004",
+            "BOOK-0005"
+          ]
+        },
+        "Category": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Product category.",
+          "synonyms": [
+            "product category",
+            "category",
+            "product line",
+            "department"
+          ],
+          "stats": {
+            "distinct": 8,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Computers & Accessories",
+              "count": 19,
+              "meaning": "Laptops, monitors, tablets and computer peripherals.",
+              "synonyms": [
+                "computers",
+                "laptops",
+                "pc accessories",
+                "computer accessories",
+                "it equipment"
+              ]
+            },
+            {
+              "value": "Electronics",
+              "count": 16,
+              "meaning": "Consumer electronics and gadgets.",
+              "synonyms": [
+                "gadgets",
+                "consumer electronics",
+                "electronic"
+              ]
+            },
+            {
+              "value": "Office Supplies",
+              "count": 16,
+              "meaning": "Stationery and office consumables.",
+              "synonyms": [
+                "stationery",
+                "office products",
+                "supplies"
+              ]
+            },
+            {
+              "value": "Furniture",
+              "count": 14,
+              "meaning": "Office and home furniture.",
+              "synonyms": [
+                "office furniture",
+                "chairs",
+                "desks"
+              ]
+            },
+            {
+              "value": "Health & Personal Care",
+              "count": 12,
+              "meaning": "Health devices and personal care products.",
+              "synonyms": [
+                "health",
+                "personal care",
+                "wellness",
+                "health and personal care"
+              ]
+            },
+            {
+              "value": "Home & Kitchen",
+              "count": 12,
+              "meaning": "Kitchen appliances and home goods.",
+              "synonyms": [
+                "kitchen",
+                "appliances",
+                "home goods",
+                "home and kitchen"
+              ]
+            },
+            {
+              "value": "Sports & Outdoors",
+              "count": 12,
+              "meaning": "Fitness and outdoor equipment.",
+              "synonyms": [
+                "sports",
+                "fitness",
+                "outdoor",
+                "outdoors",
+                "sporting goods"
+              ]
+            },
+            {
+              "value": "Books",
+              "count": 10,
+              "meaning": "Printed books.",
+              "synonyms": [
+                "book",
+                "publications"
+              ]
+            }
+          ]
+        },
+        "Brand": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Brand name.",
+          "synonyms": [
+            "manufacturer",
+            "make",
+            "label"
+          ],
+          "stats": {
+            "distinct": 18,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "ErgoForm",
+              "count": 8
+            },
+            {
+              "value": "Officio",
+              "count": 8
+            },
+            {
+              "value": "Paperline",
+              "count": 8
+            },
+            {
+              "value": "CareWell",
+              "count": 7
+            },
+            {
+              "value": "Corelink",
+              "count": 7
+            },
+            {
+              "value": "Datamax",
+              "count": 6
+            },
+            {
+              "value": "FitCore",
+              "count": 6
+            },
+            {
+              "value": "Homely",
+              "count": 6
+            },
+            {
+              "value": "KitchenPro",
+              "count": 6
+            },
+            {
+              "value": "Nexon",
+              "count": 6
+            },
+            {
+              "value": "Northbound Books",
+              "count": 6
+            },
+            {
+              "value": "Oakridge",
+              "count": 6
+            },
+            {
+              "value": "Pixelon",
+              "count": 6
+            },
+            {
+              "value": "TrailPeak",
+              "count": 6
+            },
+            {
+              "value": "Auralis",
+              "count": 5
+            },
+            {
+              "value": "Vitalis",
+              "count": 5
+            },
+            {
+              "value": "Voltix",
+              "count": 5
+            },
+            {
+              "value": "Lumen Press",
+              "count": 4
+            }
+          ]
+        },
+        "UnitPrice": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Current list price in USD (what it would sell for today, before discounts).",
+          "synonyms": [
+            "list price",
+            "price",
+            "current price",
+            "msrp",
+            "retail price"
+          ],
+          "unit": "USD",
+          "stats": {
+            "distinct": 88,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 5.99,
+            "max": 1512.99,
+            "avg": 189.84
+          }
+        },
+        "UnitCost": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Current unit cost to Summit Supply in USD (used for profit and inventory value).",
+          "synonyms": [
+            "cost",
+            "cost price",
+            "unit cost",
+            "cogs per unit"
+          ],
+          "unit": "USD",
+          "stats": {
+            "distinct": 111,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 3.2,
+            "max": 673.27,
+            "avg": 102.69
+          }
+        },
+        "StockQuantity": {
+          "type": "INTEGER",
+          "role": "measure",
+          "nullable": false,
+          "description": "Units currently in stock.",
+          "synonyms": [
+            "stock",
+            "inventory",
+            "quantity on hand",
+            "units in stock",
+            "on hand"
+          ],
+          "stats": {
+            "distinct": 95,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 0,
+            "max": 1116,
+            "avg": 238.44
+          }
+        },
+        "ReorderLevel": {
+          "type": "INTEGER",
+          "role": "measure",
+          "nullable": false,
+          "description": "Stock level at or below which the product should be reordered.",
+          "synonyms": [
+            "reorder point",
+            "minimum stock",
+            "safety stock"
+          ],
+          "stats": {
+            "distinct": 9,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 10,
+            "max": 100,
+            "avg": 44.86
+          }
+        },
+        "IsDiscontinued": {
+          "type": "INTEGER",
+          "role": "flag",
+          "nullable": false,
+          "description": "1 if the product is no longer sold, 0 if it is still sold.",
+          "synonyms": [
+            "discontinued",
+            "retired",
+            "inactive product"
+          ],
+          "stats": {
+            "distinct": 2,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 0,
+            "max": 1
+          },
+          "values": [
+            {
+              "value": 0,
+              "count": 101
+            },
+            {
+              "value": 1,
+              "count": 10
+            }
+          ]
+        },
+        "LaunchDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": false,
+          "description": "Date the product was first available for sale.",
+          "synonyms": [
+            "launch date",
+            "release date",
+            "introduced"
+          ],
+          "stats": {
+            "distinct": 108,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": "2019-01-09",
+            "max": "2026-10-16"
+          }
+        }
+      }
+    },
+    "Orders": {
+      "description": "Customer orders (one header row per order), including payment and fulfilment status.",
+      "grain": "One row per order. Line items are in OrderItems.",
+      "synonyms": [
+        "order",
+        "purchases",
+        "purchase",
+        "sales orders",
+        "transactions",
+        "transaction",
+        "bookings"
+      ],
+      "row_count": 16613,
+      "primary_key": [
+        "OrderID"
+      ],
+      "foreign_keys": [
+        "Orders.EmployeeID → Employees.EmployeeID",
+        "Orders.CustomerID → Customers.CustomerID"
+      ],
+      "referenced_by": [
+        "OrderItems.OrderID"
+      ],
+      "indexes": [
+        {
+          "name": "idx_orders_employee",
+          "columns": [
+            "EmployeeID"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "idx_orders_orderdate",
+          "columns": [
+            "OrderDate"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "idx_orders_customer",
+          "columns": [
+            "CustomerID"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "(rowid)",
+          "columns": [
+            "OrderID"
+          ],
+          "unique": true,
+          "origin": "PRIMARY KEY"
+        }
+      ],
+      "columns": {
+        "OrderID": {
+          "type": "INTEGER",
+          "role": "primary_key",
+          "nullable": false,
+          "description": "Unique order identifier.",
+          "synonyms": [
+            "order number",
+            "order id"
+          ],
+          "stats": {
+            "distinct": 16613,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 16613
+          }
+        },
+        "CustomerID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": false,
+          "description": "The customer who placed the order.",
+          "synonyms": [],
+          "references": "Customers.CustomerID",
+          "stats": {
+            "distinct": 2216,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 2996
+          }
+        },
+        "EmployeeID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": true,
+          "description": "The employee (sales rep) who booked the order; NULL for self-service online orders from consumers.",
+          "synonyms": [
+            "sales rep",
+            "salesperson",
+            "booked by",
+            "handled by",
+            "rep"
+          ],
+          "references": "Employees.EmployeeID",
+          "stats": {
+            "distinct": 77,
+            "nulls": 5458,
+            "null_pct": 32.9,
+            "min": 7,
+            "max": 324
+          }
+        },
+        "OrderDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": false,
+          "description": "Date the order was placed.",
+          "synonyms": [
+            "order date",
+            "purchase date",
+            "date ordered",
+            "placed on"
+          ],
+          "stats": {
+            "distinct": 1723,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": "2022-01-03",
+            "max": "2026-10-20"
+          }
+        },
+        "Status": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Fulfilment status of the order as of the snapshot date.",
+          "synonyms": [
+            "order status",
+            "state of the order",
+            "fulfilment status"
+          ],
+          "stats": {
+            "distinct": 6,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Delivered",
+              "count": 15391,
+              "meaning": "Delivered to the customer.",
+              "synonyms": [
+                "completed",
+                "fulfilled",
+                "received"
+              ]
+            },
+            {
+              "value": "Cancelled",
+              "count": 646,
+              "meaning": "Cancelled before shipping.",
+              "synonyms": [
+                "canceled",
+                "cancelled orders"
+              ]
+            },
+            {
+              "value": "Returned",
+              "count": 497,
+              "meaning": "Delivered and then sent back; the payment was refunded.",
+              "synonyms": [
+                "returns",
+                "returned orders",
+                "sent back"
+              ]
+            },
+            {
+              "value": "Shipped",
+              "count": 51,
+              "meaning": "Handed to the carrier, not yet delivered.",
+              "synonyms": [
+                "in transit",
+                "dispatched",
+                "on the way"
+              ]
+            },
+            {
+              "value": "Pending",
+              "count": 20,
+              "meaning": "Placed but not yet being processed.",
+              "synonyms": [
+                "unprocessed",
+                "awaiting processing",
+                "not yet processed"
+              ]
+            },
+            {
+              "value": "Processing",
+              "count": 8,
+              "meaning": "Being picked and packed.",
+              "synonyms": [
+                "in progress",
+                "being prepared"
+              ]
+            }
+          ]
+        },
+        "Channel": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Sales channel the order came through.",
+          "synonyms": [
+            "sales channel",
+            "order channel",
+            "source"
+          ],
+          "stats": {
+            "distinct": 4,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Online",
+              "count": 8619,
+              "meaning": "Placed on the website.",
+              "synonyms": [
+                "web",
+                "website",
+                "e-commerce",
+                "ecommerce",
+                "internet"
+              ]
+            },
+            {
+              "value": "Phone",
+              "count": 3227,
+              "meaning": "Placed by phone with a rep.",
+              "synonyms": [
+                "call center",
+                "telephone",
+                "phone order"
+              ]
+            },
+            {
+              "value": "Partner",
+              "count": 2920,
+              "meaning": "Placed through a reseller or marketplace partner.",
+              "synonyms": [
+                "reseller",
+                "marketplace",
+                "affiliate",
+                "partners"
+              ]
+            },
+            {
+              "value": "In-Store",
+              "count": 1847,
+              "meaning": "Bought in a physical store (collected immediately).",
+              "synonyms": [
+                "retail store",
+                "offline",
+                "walk-in",
+                "in store",
+                "in-store purchases"
+              ]
+            }
+          ]
+        },
+        "PaymentMethod": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "How the order was paid for.",
+          "synonyms": [
+            "payment method",
+            "payment type",
+            "paid with",
+            "payment mode"
+          ],
+          "stats": {
+            "distinct": 5,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Credit Card",
+              "count": 8372,
+              "meaning": "Credit or debit card.",
+              "synonyms": [
+                "card",
+                "credit card payments",
+                "debit card"
+              ]
+            },
+            {
+              "value": "Bank Transfer",
+              "count": 4831,
+              "meaning": "Invoice paid by bank transfer on net terms (mostly business customers).",
+              "synonyms": [
+                "wire",
+                "ach",
+                "invoice",
+                "wire transfer"
+              ]
+            },
+            {
+              "value": "PayPal",
+              "count": 2154,
+              "meaning": "PayPal.",
+              "synonyms": []
+            },
+            {
+              "value": "Digital Wallet",
+              "count": 791,
+              "meaning": "Apple Pay / Google Pay style mobile wallet.",
+              "synonyms": [
+                "apple pay",
+                "google pay",
+                "mobile wallet"
+              ]
+            },
+            {
+              "value": "Gift Card",
+              "count": 465,
+              "meaning": "Store gift card.",
+              "synonyms": [
+                "voucher",
+                "store credit",
+                "gift voucher"
+              ]
+            }
+          ]
+        },
+        "PaymentStatus": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "Payment state of the order as of the snapshot date.",
+          "synonyms": [
+            "payment status",
+            "paid status",
+            "billing status"
+          ],
+          "stats": {
+            "distinct": 4,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "Paid",
+              "count": 15285,
+              "meaning": "Payment received.",
+              "synonyms": [
+                "settled",
+                "completed payment",
+                "collected"
+              ]
+            },
+            {
+              "value": "Refunded",
+              "count": 737,
+              "meaning": "Payment was returned to the customer.",
+              "synonyms": [
+                "refund",
+                "refunds",
+                "reversed"
+              ]
+            },
+            {
+              "value": "Voided",
+              "count": 406,
+              "meaning": "Order cancelled before any payment was captured.",
+              "synonyms": [
+                "void",
+                "not charged"
+              ]
+            },
+            {
+              "value": "Pending",
+              "count": 185,
+              "meaning": "Payment not yet received (open invoice or awaiting capture).",
+              "synonyms": [
+                "unpaid",
+                "outstanding",
+                "open invoice",
+                "awaiting payment",
+                "receivable"
+              ]
+            }
+          ]
+        },
+        "ShippingCost": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Shipping fee charged to the customer in USD (0 for free shipping or in-store).",
+          "synonyms": [
+            "shipping",
+            "shipping fee",
+            "delivery charge",
+            "freight"
+          ],
+          "unit": "USD",
+          "stats": {
+            "distinct": 5,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 0.0,
+            "max": 19.99,
+            "avg": 5.16
+          }
+        },
+        "ShippedDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": true,
+          "description": "Date the order left the warehouse; NULL if not shipped yet or cancelled.",
+          "synonyms": [
+            "ship date",
+            "dispatch date",
+            "shipped on"
+          ],
+          "stats": {
+            "distinct": 1721,
+            "nulls": 674,
+            "null_pct": 4.1,
+            "min": "2022-01-04",
+            "max": "2026-10-20"
+          }
+        },
+        "DeliveredDate": {
+          "type": "TEXT",
+          "role": "date",
+          "nullable": true,
+          "description": "Date the order was delivered; NULL if not delivered (yet).",
+          "synonyms": [
+            "delivery date",
+            "delivered on",
+            "received date"
+          ],
+          "stats": {
+            "distinct": 1720,
+            "nulls": 725,
+            "null_pct": 4.4,
+            "min": "2022-01-07",
+            "max": "2026-10-20"
+          }
+        },
+        "ShipCity": {
+          "type": "TEXT",
+          "role": "attribute",
+          "nullable": false,
+          "description": "Delivery destination city.",
+          "synonyms": [
+            "shipping city",
+            "destination city",
+            "delivery city"
+          ],
+          "stats": {
+            "distinct": 139,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "samples": [
+            "Los Angeles",
+            "Miami",
+            "San Jose",
+            "Houston",
+            "Philadelphia"
+          ]
+        },
+        "ShipState": {
+          "type": "TEXT",
+          "role": "category",
+          "nullable": false,
+          "description": "2-letter USPS code of the delivery destination state.",
+          "synonyms": [
+            "shipping state",
+            "destination state",
+            "delivery state",
+            "shipped to"
+          ],
+          "semantic_type": "us_state",
+          "stats": {
+            "distinct": 51,
+            "nulls": 0,
+            "null_pct": 0.0
+          },
+          "values": [
+            {
+              "value": "CA",
+              "count": 2096
+            },
+            {
+              "value": "FL",
+              "count": 1387
+            },
+            {
+              "value": "TX",
+              "count": 1351
+            },
+            {
+              "value": "NY",
+              "count": 1158
+            },
+            {
+              "value": "PA",
+              "count": 710
+            },
+            {
+              "value": "OH",
+              "count": 692
+            },
+            {
+              "value": "VA",
+              "count": 530
+            },
+            {
+              "value": "IL",
+              "count": 528
+            },
+            {
+              "value": "MI",
+              "count": 508
+            },
+            {
+              "value": "GA",
+              "count": 480
+            },
+            {
+              "value": "TN",
+              "count": 450
+            },
+            {
+              "value": "NJ",
+              "count": 449
+            },
+            {
+              "value": "NC",
+              "count": 396
+            },
+            {
+              "value": "IN",
+              "count": 364
+            },
+            {
+              "value": "MO",
+              "count": 333
+            },
+            {
+              "value": "MN",
+              "count": 325
+            },
+            {
+              "value": "AL",
+              "count": 321
+            },
+            {
+              "value": "AZ",
+              "count": 316
+            },
+            {
+              "value": "LA",
+              "count": 314
+            },
+            {
+              "value": "WA",
+              "count": 293
+            },
+            {
+              "value": "CO",
+              "count": 285
+            },
+            {
+              "value": "MA",
+              "count": 262
+            },
+            {
+              "value": "OK",
+              "count": 246
+            },
+            {
+              "value": "OR",
+              "count": 229
+            },
+            {
+              "value": "UT",
+              "count": 219
+            },
+            {
+              "value": "MD",
+              "count": 215
+            },
+            {
+              "value": "NV",
+              "count": 188
+            },
+            {
+              "value": "WI",
+              "count": 185
+            },
+            {
+              "value": "AR",
+              "count": 181
+            },
+            {
+              "value": "SC",
+              "count": 180
+            },
+            {
+              "value": "NE",
+              "count": 154
+            },
+            {
+              "value": "KY",
+              "count": 130
+            },
+            {
+              "value": "NH",
+              "count": 119
+            },
+            {
+              "value": "IA",
+              "count": 116
+            },
+            {
+              "value": "KS",
+              "count": 112
+            },
+            {
+              "value": "CT",
+              "count": 110
+            },
+            {
+              "value": "MS",
+              "count": 110
+            },
+            {
+              "value": "WV",
+              "count": 104
+            },
+            {
+              "value": "ME",
+              "count": 79
+            },
+            {
+              "value": "ID",
+              "count": 78
+            },
+            {
+              "value": "HI",
+              "count": 75
+            },
+            {
+              "value": "NM",
+              "count": 50
+            },
+            {
+              "value": "DE",
+              "count": 34
+            },
+            {
+              "value": "RI",
+              "count": 33
+            },
+            {
+              "value": "WY",
+              "count": 28
+            },
+            {
+              "value": "DC",
+              "count": 21
+            },
+            {
+              "value": "ND",
+              "count": 19
+            },
+            {
+              "value": "MT",
+              "count": 16
+            },
+            {
+              "value": "VT",
+              "count": 14
+            },
+            {
+              "value": "AK",
+              "count": 12
+            },
+            {
+              "value": "SD",
+              "count": 8
+            }
+          ]
+        }
+      }
+    },
+    "OrderItems": {
+      "description": "Order lines — which products were bought in each order, how many, and at what price.",
+      "grain": "One row per product per order.",
+      "synonyms": [
+        "order item",
+        "order lines",
+        "line items",
+        "order details",
+        "basket items"
+      ],
+      "row_count": 30449,
+      "primary_key": [
+        "OrderItemID"
+      ],
+      "foreign_keys": [
+        "OrderItems.ProductID → Products.ProductID",
+        "OrderItems.OrderID → Orders.OrderID"
+      ],
+      "referenced_by": [],
+      "indexes": [
+        {
+          "name": "idx_orderitems_product",
+          "columns": [
+            "ProductID"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "idx_orderitems_order",
+          "columns": [
+            "OrderID"
+          ],
+          "unique": false,
+          "origin": "CREATE INDEX"
+        },
+        {
+          "name": "sqlite_autoindex_OrderItems_1",
+          "columns": [
+            "OrderID",
+            "ProductID"
+          ],
+          "unique": true,
+          "origin": "UNIQUE constraint"
+        },
+        {
+          "name": "(rowid)",
+          "columns": [
+            "OrderItemID"
+          ],
+          "unique": true,
+          "origin": "PRIMARY KEY"
+        }
+      ],
+      "columns": {
+        "OrderItemID": {
+          "type": "INTEGER",
+          "role": "primary_key",
+          "nullable": false,
+          "description": "Unique order-line identifier.",
+          "synonyms": [],
+          "stats": {
+            "distinct": 30449,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 30449
+          }
+        },
+        "OrderID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": false,
+          "description": "The order this line belongs to.",
+          "synonyms": [],
+          "references": "Orders.OrderID",
+          "stats": {
+            "distinct": 16613,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 16613
+          }
+        },
+        "ProductID": {
+          "type": "INTEGER",
+          "role": "foreign_key",
+          "nullable": false,
+          "description": "The product bought on this line.",
+          "synonyms": [],
+          "references": "Products.ProductID",
+          "stats": {
+            "distinct": 107,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 111
+          }
+        },
+        "Quantity": {
+          "type": "INTEGER",
+          "role": "measure",
+          "nullable": false,
+          "description": "Units bought.",
+          "synonyms": [
+            "qty",
+            "units",
+            "quantity",
+            "number of units"
+          ],
+          "stats": {
+            "distinct": 59,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 1,
+            "max": 59,
+            "avg": 4.03
+          }
+        },
+        "UnitPrice": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Price per unit charged at the time of sale, before the line discount (USD).",
+          "synonyms": [
+            "sale price",
+            "selling price",
+            "price paid"
+          ],
+          "unit": "USD",
+          "stats": {
+            "distinct": 15816,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 5.15,
+            "max": 1554.15,
+            "avg": 168.35
+          }
+        },
+        "Discount": {
+          "type": "REAL",
+          "role": "measure",
+          "nullable": false,
+          "description": "Discount on this line as a fraction (0.10 = 10% off).",
+          "synonyms": [
+            "discount rate",
+            "markdown",
+            "promo",
+            "promotion"
+          ],
+          "stats": {
+            "distinct": 7,
+            "nulls": 0,
+            "null_pct": 0.0,
+            "min": 0.0,
+            "max": 0.3,
+            "avg": 0.04
+          }
+        }
+      }
+    }
+  }
+}
