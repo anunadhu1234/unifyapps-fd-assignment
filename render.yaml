@@ -38,9 +38,8 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       # ── Browser access from the Vercel frontend ──
-      # JSON list with the production URL, e.g. ["https://unifyapps-fd-assignment.vercel.app"]
+      # Any origin may call the API: auth is a Bearer token held by the app (no cookies), so this only
+      # removes the origin check, and the rate limits still apply. To restrict it, list the frontend URL(s),
+      # e.g. ["https://unifyapps-fd-assignment.vercel.app"].
       - key: CORS_ORIGINS
-        sync: false
-      # Optional: also allow Vercel preview URLs, e.g. ^https://unifyapps-fd-assignment(-[a-z0-9-]+)?\.vercel\.app$
-      - key: CORS_ORIGIN_REGEX
-        sync: false
+        value: '["*"]'

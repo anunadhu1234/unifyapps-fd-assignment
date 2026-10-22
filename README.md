@@ -567,9 +567,9 @@ flowchart LR
 uvicorn worker, health check on `/api/health`.
 
 1. Render → **New → Blueprint** → select this repository.
-2. Enter the secret values when prompted: `AWS_BEARER_TOKEN_BEDROCK`, `AUTH_NORMAL_PASSWORD`, `AUTH_DEV_PASSWORD`,
-   and `CORS_ORIGINS` (the Vercel URL as a JSON list, e.g. `["https://<project>.vercel.app"]`). `AUTH_SECRET` is
-   generated automatically. Optionally set `CORS_ORIGIN_REGEX` to also allow Vercel preview URLs.
+2. Enter the secret values when prompted: `AWS_BEARER_TOKEN_BEDROCK`, `AUTH_NORMAL_PASSWORD` and
+   `AUTH_DEV_PASSWORD`. `AUTH_SECRET` is generated automatically, and `CORS_ORIGINS` is set to `["*"]` so the
+   frontend can call the API from any domain (including Vercel preview URLs).
 3. Every push to the repository redeploys the service.
 
 ### Frontend on Vercel
@@ -585,7 +585,9 @@ uvicorn worker, health check on `/api/health`.
   login page shows a "waking the server up" notice while it starts.
 - The free plan has **no persistent disk**: chats, run history and conversation memory reset when the service
   restarts or redeploys. The sample database and knowledge base are part of the repository, so they are unaffected.
-- Login uses a Bearer token (no cookies), so calling the API from the Vercel domain needs only CORS.
+- Login uses a Bearer token held by the app (no cookies), so allowing every origin is safe: another site cannot
+  read that token, and the rate limits apply to everyone. To restrict access anyway, set `CORS_ORIGINS` to the
+  frontend's URL(s), e.g. `["https://<project>.vercel.app"]`.
 
 ## Limitations and next steps
 
