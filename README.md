@@ -104,7 +104,7 @@ grounded **"Dive deeper"** follow-up questions.
 | Sample database schema | [docs/database.md](docs/database.md) and [backend/data/schema.sql](backend/data/schema.sql) |
 | Assumptions | [docs/assumptions.md](docs/assumptions.md) |
 | PDF copies of every document | `docs/pdf/` |
-| Demo video, deployed link | Linked at the top once available |
+| Deployed link | Linked at the top once available |
 
 ## Quick start
 
